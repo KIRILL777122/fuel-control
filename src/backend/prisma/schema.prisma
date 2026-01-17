@@ -1,0 +1,138 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Driver {
+  id             String   @id @default(cuid())
+  telegramUserId String   @unique
+  fullName       String
+  firstName      String?
+  lastName       String?
+  middleName     String?
+  isActive       Boolean  @default(true)
+  pendingMileage Int?
+  pendingReceiptFileId String?
+  pendingVehicleId String?
+  pendingPaymentMethod PaymentMethod?
+  pendingReceiptId String?
+  pendingStep    String?
+  lastSeenAt     DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  receipts       Receipt[]
+}
+
+model Vehicle {
+  id          String   @id @default(cuid())
+  name        String
+  plateNumber String? @unique
+  model       String?
+  isActive    Boolean  @default(true)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  receipts    Receipt[]
+}
+
+model Receipt {
+  id           String   @id @default(cuid())
+
+  driverId     String
+  driver       Driver   @relation(fields: [driverId], references: [id])
+
+  vehicleId    String
+  vehicle      Vehicle  @relation(fields: [vehicleId], references: [id])
+
+  receiptAt    DateTime
+  mileage      Int?
+
+  stationName  String?
+  stationInn   String?
+  paymentMethod PaymentMethod?
+  paymentComment String?
+  reimbursed   Boolean @default(false)
+  paidByDriver Boolean @default(false)
+
+  totalAmount  Decimal  @db.Decimal(12,2)
+  liters       Decimal? @db.Decimal(10,3)
+  pricePerLiter Decimal? @db.Decimal(12,4)
+  fuelType     FuelType?
+  fuelGroup    FuelGroup?
+  hasGoods     Boolean @default(false)
+  goodsAmount  Decimal? @db.Decimal(12,2)
+  addressShort String?
+  imagePath    String?
+  pdfPath      String?
+  qrRaw        String?
+  dataSource   DataSource @default(TELEGRAM)
+
+  raw          Json?
+  status       ReceiptStatus @default(DONE)
+
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  items        ReceiptItem[]
+
+  @@index([receiptAt])
+  @@index([driverId, receiptAt])
+  @@index([vehicleId, receiptAt])
+}
+
+model ReceiptItem {
+  id        String   @id @default(cuid())
+
+  receiptId String
+  receipt   Receipt  @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+
+  name      String
+  quantity  Decimal? @db.Decimal(10,3)
+  unitPrice Decimal? @db.Decimal(12,2)
+  amount    Decimal? @db.Decimal(12,2)
+  isFuel    Boolean  @default(false)
+
+  createdAt DateTime @default(now())
+
+  @@index([receiptId])
+}
+
+enum ReceiptStatus {
+  PENDING
+  DONE
+  FAILED
+}
+
+enum FuelType {
+  AI92
+  AI95
+  DIESEL
+  GAS
+  OTHER
+}
+
+enum FuelGroup {
+  BENZIN
+  DIESEL
+  GAS
+  OTHER
+}
+
+enum PaymentMethod {
+  CARD
+  CASH
+  QR
+  SELF
+}
+
+enum DataSource {
+  QR
+  MANUAL
+  TELEGRAM
+}

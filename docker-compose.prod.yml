@@ -1,0 +1,51 @@
+services:
+  db:
+    image: postgres:16
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - db_data:/var/lib/postgresql/data
+    networks:
+      - fuelnet
+
+  backend:
+    build:
+      context: ./src/backend
+    env_file:
+      - .env.production
+    environment:
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+      BACKEND_PORT: 3000
+    depends_on:
+      - db
+    ports:
+      - "3000:3000" # изменить при желании внешний порт
+    networks:
+      - fuelnet
+
+  web:
+    build:
+      context: ./src/web
+    env_file:
+      - .env.production
+    environment:
+      API_BASE_URL: http://backend:3000
+      PORT: 3001
+    depends_on:
+      - backend
+    ports:
+      - "3001:3001" # изменить при желании внешний порт
+    networks:
+      - fuelnet
+
+volumes:
+  db_data:
+
+networks:
+  fuelnet:
+    driver: bridge

@@ -1,0 +1,98 @@
+﻿export const dynamic = "force-dynamic";
+
+type AnyObj = Record<string, any>;
+
+async function getJson(path: string) {
+  try {
+    const res = await fetch(`http://localhost:3000${path}`, { cache: "no-store" });
+    const text = await res.text();
+    let data: any;
+    try { data = JSON.parse(text); } catch { data = text; }
+    return { ok: res.ok, status: res.status, data };
+  } catch (e: any) {
+    return { ok: false, status: 0, data: { error: String(e?.message ?? e) } };
+  }
+}
+
+function toCell(v: any) {
+  if (v === null || v === undefined) return "";
+  if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") return String(v);
+  return JSON.stringify(v);
+}
+
+function Table({ title, rows }: { title: string; rows: any }) {
+  const arr = Array.isArray(rows) ? (rows as AnyObj[]) : null;
+
+  return (
+    <section style={{ marginTop: 24 }}>
+      <h2 style={{ margin: "16px 0 8px" }}>{title}</h2>
+
+      {!arr && (
+        <pre style={{ padding: 12, background: "#f6f6f6", borderRadius: 8, overflow: "auto" }}>
+          {JSON.stringify(rows, null, 2)}
+        </pre>
+      )}
+
+      {arr && arr.length === 0 && <p style={{ opacity: 0.7 }}>Пусто</p>}
+
+      {arr && arr.length > 0 && (() => {
+        const cols = Array.from(new Set(arr.flatMap((r) => Object.keys(r))));
+        return (
+          <div style={{ overflow: "auto", border: "1px solid #eee", borderRadius: 10 }}>
+            <table style={{ borderCollapse: "collapse", width: "100%", minWidth: 800 }}>
+              <thead>
+                <tr>
+                  {cols.map((c) => (
+                    <th key={c} style={{ textAlign: "left", padding: 10, borderBottom: "1px solid #eee", background: "#fafafa" }}>
+                      {c}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {arr.slice(0, 100).map((r, idx) => (
+                  <tr key={idx}>
+                    {cols.map((c) => (
+                      <td key={c} style={{ padding: 10, borderBottom: "1px solid #f2f2f2", verticalAlign: "top", whiteSpace: "nowrap" }}>
+                        {toCell(r[c])}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        );
+      })()}
+    </section>
+  );
+}
+
+export default async function Home() {
+  const [health, drivers, vehicles, receipts, items] = await Promise.all([
+    getJson("/health"),
+    getJson("/api/drivers"),
+    getJson("/api/vehicles"),
+    getJson("/api/receipts?limit=50"),
+    getJson("/api/receipt-items?limit=200"),
+  ]);
+
+  return (
+    <main style={{ padding: 24, fontFamily: "Arial" }}>
+      <h1 style={{ margin: 0 }}>Fuel Control</h1>
+      <p style={{ marginTop: 8, opacity: 0.75 }}>Backend: localhost:3000 • Web: localhost:3001</p>
+
+      <section style={{ marginTop: 16, padding: 12, background: "#f6f6f6", borderRadius: 8 }}>
+        <div><b>Health:</b> {health.ok ? "OK" : "FAIL"} (status {health.status})</div>
+        {!health.ok && (
+          <pre style={{ marginTop: 8, overflow: "auto" }}>{JSON.stringify(health.data, null, 2)}</pre>
+        )}
+      </section>
+
+      <Table title={`Drivers (${Array.isArray(drivers.data) ? drivers.data.length : "?"})`} rows={drivers.data} />
+      <Table title={`Vehicles (${Array.isArray(vehicles.data) ? vehicles.data.length : "?"})`} rows={vehicles.data} />
+      <Table title={`Receipts (last 50)`} rows={receipts.data} />
+      <Table title={`Receipt Items (last 200)`} rows={items.data} />
+    </main>
+  );
+}

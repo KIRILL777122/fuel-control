@@ -1,0 +1,21 @@
+export type Driver = { id: string; fullName?: string | null; telegramUserId: string };
+export type Vehicle = { id: string; name: string | null; plateNumber: string | null };
+export type Receipt = {
+  id: string;
+  driverId: string;
+  vehicleId: string;
+  totalAmount: string;
+  status: string;
+  paymentMethod: string | null;
+  mileage: number | null;
+  receiptAt: string;
+  fuelType?: string | null;
+  dataSource?: string | null;
+  paidByDriver?: boolean;
+  reimbursed?: boolean;
+  paymentComment?: string | null;
+  driver?: Driver | null;
+  vehicle?: Vehicle | null;
+  derivedDeltaKm?: number | null;
+  derivedLPer100?: number | null;
+};

@@ -1,0 +1,17 @@
+{
+  "name": "fuel-control",
+  "private": true,
+  "workspaces": [
+    "src/backend",
+    "src/web"
+  ],
+  "scripts": {
+    "dev": "concurrently -n backend,web -c auto \"npm --workspace src/backend run dev\" \"npm --workspace src/web run dev\"",
+    "db:generate": "npm --workspace src/backend run db:generate",
+    "db:migrate": "npm --workspace src/backend run db:migrate",
+    "seed": "npm --workspace src/backend run seed"
+  },
+  "devDependencies": {
+    "concurrently": "^9.0.0"
+  }
+}

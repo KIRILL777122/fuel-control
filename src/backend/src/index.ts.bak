@@ -1,0 +1,49 @@
+﻿import Fastify from "fastify";
+import { PrismaClient } from "@prisma/client";
+
+const app = Fastify({ logger: true });
+const prisma = new PrismaClient();
+
+app.get("/", async () => ({ ok: true, service: "fuel-control" }));
+app.get("/health", async () => ({ ok: true }));
+
+// ===== API =====
+app.get("/api/drivers", async () => prisma.driver.findMany());
+
+app.get("/api/vehicles", async () => prisma.vehicle.findMany());
+
+app.get("/api/receipts", async (req) => {
+  const q = (req.query ?? {}) as any;
+  const limitRaw = q.limit;
+  const limit = Math.max(1, Math.min(200, Number(limitRaw ?? 50) || 50));
+  return prisma.receipt.findMany({ take: limit });
+});
+
+app.get("/api/receipt-items", async (req) => {
+  const q = (req.query ?? {}) as any;
+  const limitRaw = q.limit;
+  const limit = Math.max(1, Math.min(500, Number(limitRaw ?? 200) || 200));
+  return prisma.receiptItem.findMany({ take: limit });
+});
+
+const port = Number(process.env.BACKEND_PORT ?? 3000);
+
+async function main() {
+  try {
+    await app.listen({ host: "0.0.0.0", port });
+  } catch (err) {
+    app.log.error(err);
+    process.exit(1);
+  }
+}
+
+process.on("SIGINT", async () => {
+  await prisma.$disconnect();
+  process.exit(0);
+});
+process.on("SIGTERM", async () => {
+  await prisma.$disconnect();
+  process.exit(0);
+});
+
+main();
