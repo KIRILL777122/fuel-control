@@ -1,7 +1,17 @@
-node_modules/
-dist/
-.next/
+﻿# secrets
 .env
 .env.*
-data/
+!.env.example
+
+# node/build
+node_modules/
+.next/
+dist/
+build/
+out/
+coverage/
 *.log
+
+# runtime data (uploads, cheques, db)
+data/
+db_data/
