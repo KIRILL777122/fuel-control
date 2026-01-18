@@ -124,7 +124,7 @@ export function startRepairBot(prisma: PrismaClient) {
   });
 
   bot.on("callback_query", async (ctx) => {
-    const data = ctx.callbackQuery?.data;
+    const data = (ctx.callbackQuery as any)?.data;
     const chatId = ctx.chat?.id.toString();
     if (!data || !chatId) return;
     const draft = await ensureDraft(prisma, chatId);
@@ -290,7 +290,7 @@ export function startRepairBot(prisma: PrismaClient) {
         await ctx.reply("Добавьте документы или нажмите «Пропустить».", Markup.keyboard([["Пропустить"]]).resize());
         return;
       }
-      const [name, qtyRaw, priceRaw] = text.split(";").map((item) => item.trim());
+      const [name, qtyRaw, priceRaw] = text.split(";").map((item: any) => item.trim());
       if (!name || !qtyRaw || !priceRaw) {
         await ctx.reply("Формат: Название; кол-во; цена");
         return;
