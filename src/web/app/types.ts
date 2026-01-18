@@ -1,5 +1,14 @@
 export type Driver = { id: string; fullName?: string | null; telegramUserId: string };
-export type Vehicle = { id: string; name: string | null; plateNumber: string | null };
+export type Vehicle = {
+  id: string;
+  name: string | null;
+  plateNumber: string | null;
+  makeModel?: string | null;
+  year?: number | null;
+  vin?: string | null;
+  engine?: string | null;
+  currentOdometerKm?: number | null;
+};
 export type Receipt = {
   id: string;
   driverId: string;

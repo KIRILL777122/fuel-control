@@ -207,7 +207,7 @@ export default function ReceiptTable({
             <option value="ALL">Все</option>
             <option value="PENDING">PENDING</option>
             <option value="DONE">DONE</option>
-            <option value="FAILED">FAILED</option>
+            <option value="FAILED">Ошибка</option>
           </select>
         </label>
         <label>
@@ -587,7 +587,7 @@ function DetailModal({
             <select value={status} onChange={(e) => setStatus(e.target.value)}>
               <option value="PENDING">PENDING</option>
               <option value="DONE">DONE</option>
-              <option value="FAILED">FAILED</option>
+              <option value="FAILED">Ошибка</option>
             </select>
           </label>
           <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 14 }}>

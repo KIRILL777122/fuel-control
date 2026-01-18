@@ -36,7 +36,7 @@ export function DriverForm() {
   return (
     <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       <label>
-        Telegram ID
+        ID Телеграм
         <input
           required
           value={telegramUserId}

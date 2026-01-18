@@ -7,6 +7,7 @@ import {
   PaymentMethod,
   DataSource,
 } from "@prisma/client";
+import { refreshVehicleOdometer } from "./repair-utils.js";
 
 export type ReceiptItemInput = {
   name: string;
@@ -106,6 +107,7 @@ export async function createReceiptFromDto(prisma: PrismaClient, dto: CreateRece
 
   const plate = vehiclePayload.plateNumber ?? null;
   const vname = vehiclePayload.name ?? null;
+  const fallbackPlate = plate || vname || `UNKNOWN-${Date.now()}`;
 
   const foundVehicle =
     (plate &&
@@ -118,7 +120,7 @@ export async function createReceiptFromDto(prisma: PrismaClient, dto: CreateRece
       })));
 
   const vehicle = foundVehicle
-    ? await prisma.vehicle.update({
+      ? await prisma.vehicle.update({
         where: { id: foundVehicle.id },
         data: {
           plateNumber: plate ?? foundVehicle.plateNumber,
@@ -129,7 +131,7 @@ export async function createReceiptFromDto(prisma: PrismaClient, dto: CreateRece
     : await prisma.vehicle.create({
         data: {
           name: vname ?? plate ?? "Unknown vehicle",
-          plateNumber: plate,
+          plateNumber: fallbackPlate,
           isActive: true,
         },
       });
@@ -197,6 +199,10 @@ export async function createReceiptFromDto(prisma: PrismaClient, dto: CreateRece
         createdAt: new Date(),
       })),
     });
+  }
+
+  if (receipt.mileage !== null) {
+    await refreshVehicleOdometer(prisma, vehicle.id);
   }
 
   return {

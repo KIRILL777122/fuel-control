@@ -2,6 +2,7 @@ import Fastify from "fastify";
 import cors from "@fastify/cors";
 import jwt from "@fastify/jwt";
 import cookie from "@fastify/cookie";
+import multipart from "@fastify/multipart";
 import fs from "fs";
 import path from "path";
 import Excel from "exceljs";
@@ -10,6 +11,10 @@ import { createReceiptFromDto, CreateReceiptDto } from "./receipt-service.js";
 import { registerTelegramRoutes } from "./telegram-router.js";
 import { startPendingWorker } from "./pending-worker.js";
 import { errorLogger } from "./logger.js";
+import { registerRepairRoutes } from "./repair-routes.js";
+import { refreshVehicleOdometer } from "./repair-utils.js";
+import { startRepairBot } from "./repair-bot.js";
+import { startMaintenanceCron } from "./maintenance-cron.js";
 
 const app = Fastify({ logger: true });
 const prisma = new PrismaClient();
@@ -30,6 +35,12 @@ const secureCookie = (process.env.APP_ENV || process.env.NODE_ENV || "").toLower
 
 app.register(cookie, {
   secret: jwtSecret || "dev-secret-change-me-32chars",
+});
+
+app.register(multipart, {
+  limits: {
+    fileSize: 20 * 1024 * 1024,
+  },
 });
 
 const ADMIN_LOGIN = process.env.WEB_ADMIN_LOGIN;
@@ -183,11 +194,12 @@ app.get("/api/auth/me", async (req, reply) => {
   }
 });
 
-app.get("/api/drivers", async () =>
-  prisma.driver.findMany({
+app.get("/api/drivers", async (req, reply) => {
+  if (!(await requireAuth(req, reply))) return;
+  return prisma.driver.findMany({
     orderBy: { createdAt: "desc" },
-  })
-);
+  });
+});
 
 app.post("/api/drivers", async (req, reply) => {
   if (!(await requireAuth(req, reply))) return;
@@ -264,11 +276,12 @@ app.post("/api/drivers/:id/deactivate", async (req, reply) => {
   }
 });
 
-app.get("/api/vehicles", async () =>
-  prisma.vehicle.findMany({
+app.get("/api/vehicles", async (req, reply) => {
+  if (!(await requireAuth(req, reply))) return;
+  return prisma.vehicle.findMany({
     orderBy: [{ sortOrder: "desc" }, { createdAt: "desc" }],
-  })
-);
+  });
+});
 
 function computeDerived(receipts: any[]) {
   const sortedAsc = [...receipts].sort((a, b) => {
@@ -320,7 +333,16 @@ app.post("/api/vehicles", async (req, reply) => {
 
   const payload = {
     name,
-    plateNumber: plateNumber ?? null,
+    plateNumber: plateNumber ?? "",
+    makeModel: (body.makeModel as string | undefined)?.trim() ?? null,
+    year: body.year ? Number(body.year) : null,
+    vin: (body.vin as string | undefined)?.trim() ?? null,
+    engine: (body.engine as string | undefined)?.trim() ?? null,
+    color: (body.color as string | undefined)?.trim() ?? null,
+    purchasedAt: body.purchasedAt ? new Date(body.purchasedAt) : null,
+    purchasedOdometerKm: body.purchasedOdometerKm ? Number(body.purchasedOdometerKm) : null,
+    currentOdometerKm: body.currentOdometerKm ? Number(body.currentOdometerKm) : null,
+    notes: (body.notes as string | undefined)?.trim() ?? null,
     sortOrder: sortOrder ?? 0,
     isActive: isActive ?? true,
   };
@@ -330,12 +352,6 @@ app.post("/api/vehicles", async (req, reply) => {
     
     // Если редактируем существующее авто
     if (id) {
-      const payload = {
-        name,
-        plateNumber: plateNumber ?? null,
-        sortOrder: sortOrder ?? 0,
-        isActive: isActive ?? true,
-      };
       const vehicle = await prisma.vehicle.update({ where: { id }, data: payload });
       req.log.info({ id: vehicle.id, plateNumber: vehicle.plateNumber }, "vehicle updated");
       return reply.code(200).send(vehicle);
@@ -352,23 +368,12 @@ app.post("/api/vehicles", async (req, reply) => {
         return reply.code(400).send({ error: "vehicle_already_exists", message: "Авто с таким госномером уже добавлено" });
       }
       // Если существует неактивное - активируем и обновляем
-      const payload = {
-        name,
-        sortOrder: sortOrder ?? existing.sortOrder ?? 0,
-        isActive: true,
-      };
-      const vehicle = await prisma.vehicle.update({ where: { id: existing.id }, data: payload });
+      const vehicle = await prisma.vehicle.update({ where: { id: existing.id }, data: { ...payload, isActive: true } });
       req.log.info({ id: vehicle.id, plateNumber: vehicle.plateNumber }, "vehicle reactivated");
       return reply.code(200).send(vehicle);
     }
 
     // Создаем новое авто
-    const payload = {
-      name,
-      plateNumber: plateNumber ?? null,
-      sortOrder: sortOrder ?? 0,
-      isActive: isActive ?? true,
-    };
     const vehicle = await prisma.vehicle.create({ data: payload });
     req.log.info({ id: vehicle.id, plateNumber: vehicle.plateNumber }, "vehicle created");
     return reply.code(201).send(vehicle);
@@ -395,7 +400,58 @@ app.post("/api/vehicles/:id/deactivate", async (req, reply) => {
   }
 });
 
-app.get("/api/receipts", async (req) => {
+app.get("/api/vehicles/:id", async (req, reply) => {
+  if (!(await requireAuth(req, reply))) return;
+  const id = (req.params as any)?.id as string | undefined;
+  if (!id) return reply.code(400).send({ error: "id is required" });
+  const vehicle = await prisma.vehicle.findUnique({ where: { id } });
+  if (!vehicle) return reply.code(404).send({ error: "not found" });
+  return vehicle;
+});
+
+app.patch("/api/vehicles/:id", async (req, reply) => {
+  if (!(await requireAuth(req, reply))) return;
+  const id = (req.params as any)?.id as string | undefined;
+  if (!id) return reply.code(400).send({ error: "id is required" });
+  const body = (req.body ?? {}) as any;
+  const rawPlate = (body.plateNumber as string | undefined)?.trim();
+  const plateNumber = rawPlate ? rawPlate.toUpperCase() : undefined;
+  try {
+    const updated = await prisma.vehicle.update({
+      where: { id },
+      data: {
+        name: body.name ?? undefined,
+        plateNumber: plateNumber ?? undefined,
+        makeModel: body.makeModel ?? undefined,
+        year: body.year ? Number(body.year) : undefined,
+        vin: body.vin ?? undefined,
+        engine: body.engine ?? undefined,
+        color: body.color ?? undefined,
+        purchasedAt: body.purchasedAt ? new Date(body.purchasedAt) : undefined,
+        purchasedOdometerKm: body.purchasedOdometerKm ? Number(body.purchasedOdometerKm) : undefined,
+        currentOdometerKm: body.currentOdometerKm ? Number(body.currentOdometerKm) : undefined,
+        notes: body.notes ?? undefined,
+        isActive: body.isActive ?? undefined,
+        sortOrder: body.sortOrder ?? undefined,
+      },
+    });
+    return updated;
+  } catch (err: any) {
+    req.log.error({ err, id }, "vehicle update error");
+    return handlePrismaError(err, reply);
+  }
+});
+
+app.delete("/api/vehicles/:id", async (req, reply) => {
+  if (!(await requireAuth(req, reply))) return;
+  const id = (req.params as any)?.id as string | undefined;
+  if (!id) return reply.code(400).send({ error: "id is required" });
+  await prisma.vehicle.delete({ where: { id } });
+  return reply.code(204).send();
+});
+
+app.get("/api/receipts", async (req, reply) => {
+  if (!(await requireAuth(req, reply))) return;
   const q = (req.query ?? {}) as any;
   const limit = Math.max(1, Math.min(200, Number(q.limit ?? 50) || 50));
   const receipts = await prisma.receipt.findMany({
@@ -453,7 +509,8 @@ app.get("/api/receipts/:id/file", async (req, reply) => {
   return reply.send(stream);
 });
 
-app.get("/api/reports/summary", async () => {
+app.get("/api/reports/summary", async (req, reply) => {
+  if (!(await requireAuth(req, reply))) return;
   const receipts = await prisma.receipt.findMany({
     where: { status: { in: [ReceiptStatus.DONE, ReceiptStatus.PENDING] } },
   });
@@ -802,6 +859,9 @@ app.patch("/api/receipts/:id", async (req, reply) => {
 
   try {
     const updated = await prisma.receipt.update({ where: { id }, data });
+    if (updated.mileage !== null) {
+      await refreshVehicleOdometer(prisma, updated.vehicleId);
+    }
     return updated;
   } catch (err: any) {
     return reply.code(400).send({ error: err?.message ?? "update failed" });
@@ -832,7 +892,8 @@ app.post("/api/receipts/mark-reimbursed", async (req, reply) => {
   return { updated: result.count };
 });
 
-app.get("/api/receipt-items", async (req) => {
+app.get("/api/receipt-items", async (req, reply) => {
+  if (!(await requireAuth(req, reply))) return;
   const q = (req.query ?? {}) as any;
   const limit = Math.max(1, Math.min(500, Number(q.limit ?? 200) || 200));
   return prisma.receiptItem.findMany({
@@ -945,6 +1006,7 @@ app.get("/api/late-delays/summary", async (req, reply) => {
 
 // Telegram routes
 registerTelegramRoutes(app, prisma);
+registerRepairRoutes(app, prisma, requireAuth);
 
 const port = Number(process.env.BACKEND_PORT ?? 3000);
 
@@ -953,6 +1015,8 @@ async function main() {
     await app.listen({ host: "0.0.0.0", port });
     // start lightweight worker for PENDING receipts
     startPendingWorker(prisma);
+    startRepairBot(prisma);
+    startMaintenanceCron(prisma);
   } catch (err) {
     app.log.error(err);
     process.exit(1);
