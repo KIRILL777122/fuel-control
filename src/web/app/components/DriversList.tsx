@@ -52,6 +52,7 @@ export function DriversList({ items }: { items: Driver[] }) {
   };
 
   const deactivate = async (id: string) => {
+    if (!window.confirm("Удалить водителя?")) return;
     setLoadingId(id);
     try {
       const res = await fetch(`${API_BASE}/api/drivers/${id}/deactivate`, {
@@ -93,7 +94,7 @@ export function DriversList({ items }: { items: Driver[] }) {
               <input
                 value={editTg}
                 onChange={(e) => setEditTg(e.target.value)}
-                placeholder="Telegram ID"
+                placeholder="ID Телеграм"
                 style={{ padding: 8, borderRadius: 8, border: "1px solid #d7d7e0" }}
               />
               <div style={{ display: "flex", gap: 8 }}>
@@ -115,7 +116,7 @@ export function DriversList({ items }: { items: Driver[] }) {
           ) : (
             <>
               <div style={{ fontWeight: 700 }}>{d.fullName || d.telegramUserId}</div>
-              <div style={{ fontSize: 12, opacity: 0.75 }}>Telegram ID: {d.telegramUserId}</div>
+              <div style={{ fontSize: 12, opacity: 0.75 }}>ID Телеграм: {d.telegramUserId}</div>
               <div style={{ display: "flex", gap: 8 }}>
                 <button
                   style={{ padding: "6px 10px", borderRadius: 8, border: "none", background: "#4b7bec", color: "#fff" }}

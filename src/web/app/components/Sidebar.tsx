@@ -19,9 +19,10 @@ export default function Sidebar() {
 
   const menuItems = [
     { path: "/", label: "Сводка", icon: "📊" },
-    { path: "/add", label: "Добавить новое", icon: "➕" },
+    { path: "/vehicles", label: "Авто", icon: "🚗" },
+    { path: "/drivers", label: "Водители", icon: "🧑‍✈️" },
+    { path: "/repairs", label: "Ремонт", icon: "🔧" },
     { path: "/compensations", label: "Компенсация", icon: "💰" },
-    { path: "/repair", label: "Ремонт", icon: "🔧" },
     { path: "/receipts", label: "Чеки", icon: "🧾" },
     { path: "/late", label: "Опоздания", icon: "⏰" },
   ];

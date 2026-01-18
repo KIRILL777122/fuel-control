@@ -32,14 +32,26 @@ model Driver {
 model Vehicle {
   id          String   @id @default(cuid())
   name        String
-  plateNumber String? @unique
-  model       String?
+  plateNumber String  @unique
+  makeModel   String?
+  year        Int?
+  vin         String?
+  engine      String?
+  color       String?
+  purchasedAt DateTime?
+  purchasedOdometerKm Int?
+  currentOdometerKm   Int?
+  notes       String?
   isActive    Boolean  @default(true)
   sortOrder   Int      @default(0)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
   receipts    Receipt[]
+  repairEvents RepairEvent[]
+  maintenanceItems MaintenanceItem[]
+  vehiclePartsSpecs VehiclePartsSpec[]
+  accidentEvents AccidentEvent[]
 }
 
 model Receipt {
@@ -136,6 +148,215 @@ enum DataSource {
   QR
   MANUAL
   TELEGRAM
+}
+
+enum RepairEventType {
+  MAINTENANCE
+  REPAIR
+}
+
+enum RepairEventStatus {
+  DRAFT
+  IN_PROGRESS
+  DONE
+  CANCELLED
+}
+
+enum PaymentStatus {
+  UNPAID
+  PAID
+}
+
+enum RepairCreatedFrom {
+  WEB
+  TELEGRAM_BOT
+}
+
+enum RepairAttachmentType {
+  ORDER
+  PHOTO
+  OTHER
+}
+
+enum RepairAttachmentSource {
+  WEB
+  TELEGRAM_BOT
+}
+
+enum RepairAiParseStatus {
+  NONE
+  PENDING
+  DONE
+  FAILED
+}
+
+enum VehiclePartsGroup {
+  OIL_ENGINE
+  FILTER_OIL
+  FILTER_AIR
+  FILTER_FUEL
+  FILTER_CABIN
+  BRAKE_PADS
+  BRAKE_DISCS
+  SPARK_PLUGS
+  BELTS
+  OTHER
+}
+
+model RepairEvent {
+  id             String   @id @default(cuid())
+  vehicleId      String
+  vehicle        Vehicle  @relation(fields: [vehicleId], references: [id])
+  eventType      RepairEventType
+  status         RepairEventStatus @default(DRAFT)
+  startedAt      DateTime
+  finishedAt     DateTime?
+  odometerKm     Int
+  categoryCode   String
+  subsystemCode  String?
+  symptomsText   String
+  findingsText   String?
+  serviceName    String?
+  paymentStatus  PaymentStatus @default(UNPAID)
+  totalCostWork  Decimal  @db.Decimal(12,2) @default(0)
+  totalCostParts Decimal  @db.Decimal(12,2) @default(0)
+  totalCostOther Decimal  @db.Decimal(12,2) @default(0)
+  totalCost      Decimal  @db.Decimal(12,2) @default(0)
+  tags           Json?
+  createdFrom    RepairCreatedFrom @default(WEB)
+  rawInputText   String?
+  aiParseStatus  RepairAiParseStatus @default(NONE)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  works          RepairWork[]
+  parts          RepairPart[]
+  expenses       RepairExpense[]
+  attachments    RepairAttachment[]
+  accidents      AccidentEvent[]
+
+  @@index([vehicleId, startedAt])
+  @@index([categoryCode])
+}
+
+model RepairWork {
+  id            String @id @default(cuid())
+  repairEventId String
+  repairEvent   RepairEvent @relation(fields: [repairEventId], references: [id], onDelete: Cascade)
+  workName      String
+  normHours     Decimal? @db.Decimal(10,2)
+  cost          Decimal  @db.Decimal(12,2)
+  comment       String?
+  createdAt     DateTime @default(now())
+
+  @@index([repairEventId])
+}
+
+model RepairPart {
+  id            String @id @default(cuid())
+  repairEventId String
+  repairEvent   RepairEvent @relation(fields: [repairEventId], references: [id], onDelete: Cascade)
+  partName      String
+  brand         String?
+  partNumber    String?
+  qty           Decimal  @db.Decimal(10,2)
+  unitPrice     Decimal  @db.Decimal(12,2)
+  totalPrice    Decimal  @db.Decimal(12,2)
+  supplier      String?
+  warrantyUntilDate DateTime?
+  warrantyUntilOdometerKm Int?
+  comment       String?
+  createdAt     DateTime @default(now())
+
+  @@index([repairEventId])
+}
+
+model RepairExpense {
+  id            String @id @default(cuid())
+  repairEventId String
+  repairEvent   RepairEvent @relation(fields: [repairEventId], references: [id], onDelete: Cascade)
+  name          String
+  cost          Decimal @db.Decimal(12,2)
+  comment       String?
+  createdAt     DateTime @default(now())
+
+  @@index([repairEventId])
+}
+
+model RepairAttachment {
+  id            String @id @default(cuid())
+  repairEventId String
+  repairEvent   RepairEvent @relation(fields: [repairEventId], references: [id], onDelete: Cascade)
+  fileType      RepairAttachmentType
+  fileName      String
+  mimeType      String
+  size          Int
+  storageKey    String
+  uploadedAt    DateTime @default(now())
+  source        RepairAttachmentSource @default(WEB)
+
+  @@index([repairEventId])
+}
+
+model MaintenanceItem {
+  id            String @id @default(cuid())
+  vehicleId     String
+  vehicle       Vehicle @relation(fields: [vehicleId], references: [id])
+  name          String
+  intervalKm    Int?
+  intervalDays  Int?
+  lastDoneAt    DateTime?
+  lastDoneOdometerKm Int?
+  notifyBeforeKm Int @default(500)
+  notifyBeforeDays Int @default(7)
+  isActive      Boolean @default(true)
+  lastNotifiedAt DateTime?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([vehicleId])
+}
+
+model VehiclePartsSpec {
+  id             String @id @default(cuid())
+  vehicleId      String
+  vehicle        Vehicle @relation(fields: [vehicleId], references: [id])
+  groupCode      VehiclePartsGroup
+  recommendedText String
+  preferredBrands Json?
+  avoidBrands     Json?
+  notes           String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([vehicleId])
+}
+
+model AccidentEvent {
+  id             String @id @default(cuid())
+  vehicleId      String
+  vehicle        Vehicle @relation(fields: [vehicleId], references: [id])
+  occurredAt     DateTime
+  odometerKm     Int?
+  description    String
+  damage         String?
+  repaired       Boolean @default(false)
+  repairEventId  String?
+  repairEvent    RepairEvent? @relation(fields: [repairEventId], references: [id])
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([vehicleId])
+}
+
+model RepairDraft {
+  id           String @id @default(cuid())
+  chatId       String
+  step         String
+  payload      Json?
+  createdFrom  RepairCreatedFrom @default(TELEGRAM_BOT)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 }
 
 model LateDelay {

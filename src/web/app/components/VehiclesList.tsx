@@ -21,6 +21,7 @@ export function VehiclesList({ initial }: { initial: Vehicle[] }) {
   const active = items.filter((v) => v.isActive !== false);
 
   const deactivate = async (id: string) => {
+    if (!window.confirm("Удалить авто?")) return;
     setLoadingId(id);
     try {
       const res = await fetch(`${API_BASE}/api/vehicles/${id}/deactivate`, {

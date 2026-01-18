@@ -11,7 +11,7 @@ const API_BASE = "";
 
 async function getJson(path: string) {
   try {
-    const res = await fetch(`${API_BASE}${path}`, { cache: "no-store" });
+    const res = await fetch(`${API_BASE}${path}`, { cache: "no-store", credentials: "include" });
     const text = await res.text();
     let data: any;
     try {
