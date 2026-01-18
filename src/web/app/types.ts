@@ -18,4 +18,7 @@ export type Receipt = {
   vehicle?: Vehicle | null;
   derivedDeltaKm?: number | null;
   derivedLPer100?: number | null;
+  liters?: number | string | null;
+  pricePerLiter?: number | string | null;
+  addressShort?: string | null;
 };

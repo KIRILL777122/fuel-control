@@ -4,11 +4,23 @@ import React from "react";
 import styles from "../page.module.css";
 import { Driver, Vehicle, Receipt } from "../types";
 
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE ||
-  process.env.NEXT_PUBLIC_API_BASE_URL ||
-  process.env.API_BASE_URL ||
-  "http://localhost:3000";
+// Use relative URLs for API requests - will be proxied by Caddy/nginx or Next.js rewrites
+// For client-side, we use relative URLs which work when proxied through the web server
+const getApiBase = () => {
+  // In browser, use relative URL (proxied by Caddy/nginx)
+  if (typeof window !== "undefined") {
+    return ""; // Relative URL - will use same domain
+  }
+  // On server, use full URL from env
+  return (
+    process.env.NEXT_PUBLIC_API_BASE ||
+    process.env.NEXT_PUBLIC_API_BASE_URL ||
+    process.env.API_BASE_URL ||
+    "http://localhost:3000"
+  );
+};
+
+const API_BASE = getApiBase();
 
 function formatDate(value?: string | null) {
   if (!value) return "";
@@ -96,18 +108,15 @@ export default function ReceiptTable({
   });
 
   const columns = [
+    { key: "status", title: "Статус" },
     { key: "receiptAt", title: "Дата" },
     { key: "driver", title: "Водитель" },
     { key: "vehicle", title: "Авто" },
-    { key: "status", title: "Статус" },
-    { key: "paymentMethod", title: "Оплата" },
-    { key: "paidByDriver", title: "Оплатил сам" },
-    { key: "reimbursed", title: "Компенсация" },
-    { key: "totalAmount", title: "Сумма" },
     { key: "mileage", title: "Пробег" },
-    { key: "deltaKm", title: "Δкм" },
-    { key: "lPer100", title: "л/100" },
+    { key: "totalAmount", title: "Сумма" },
+    { key: "liters", title: "Литры" },
     { key: "fuelType", title: "Топливо" },
+    { key: "lPer100", title: "л/100" },
     { key: "dataSource", title: "Источник" },
   ];
 
@@ -116,18 +125,15 @@ export default function ReceiptTable({
     const vehicle = vehicleMap.get(r.vehicleId) ?? r.vehicle;
     return {
       __raw: r,
+      status: r.status,
       receiptAt: formatDate(r.receiptAt),
       driver: driver?.fullName ?? driver?.telegramUserId ?? "—",
       vehicle: vehicle?.plateNumber ?? vehicle?.name ?? "—",
-      status: r.status,
-      paymentMethod: r.paymentMethod ?? "—",
-      paidByDriver: r.paidByDriver ? "Да" : "Нет",
-      reimbursed: r.reimbursed ? "Да" : "Нет",
-      totalAmount: r.totalAmount,
       mileage: r.mileage ?? "—",
-      deltaKm: r.derivedDeltaKm ?? "—",
-      lPer100: r.derivedLPer100 !== null && r.derivedLPer100 !== undefined ? r.derivedLPer100.toFixed(1) : "—",
+      totalAmount: r.totalAmount,
+      liters: r.liters ? String(r.liters) : "—",
       fuelType: r.fuelType ?? "—",
+      lPer100: r.derivedLPer100 !== null && r.derivedLPer100 !== undefined ? r.derivedLPer100.toFixed(1) : "—",
       dataSource: r.dataSource ?? "—",
     };
   });
@@ -146,7 +152,7 @@ export default function ReceiptTable({
   const handleServerExport = async () => {
     setExportingCsv(true);
     try {
-      const res = await fetch(`${API_BASE}/api/reports/export`, {
+      const res = await fetch(`/api/reports/export`, {
         credentials: "include",
       });
       if (res.status === 401) {
@@ -170,7 +176,7 @@ export default function ReceiptTable({
   const handleServerExportXlsx = async () => {
     setExportingXlsx(true);
     try {
-      const res = await fetch(`${API_BASE}/api/reports/export.xlsx`, {
+      const res = await fetch(`/api/reports/export.xlsx`, {
         credentials: "include",
       });
       if (res.status === 401) {
@@ -299,7 +305,7 @@ export default function ReceiptTable({
                       if (newVal === undefined) return;
                       try {
                         const res = await fetch(
-                          `${process.env.NEXT_PUBLIC_API_BASE ?? process.env.API_BASE_URL ?? "http://localhost:3000"}/api/receipts/${r.__raw.id}`,
+                          `/api/receipts/${r.__raw.id}`,
                           {
                             method: "PATCH",
                             headers: { "Content-Type": "application/json" },
@@ -315,7 +321,6 @@ export default function ReceiptTable({
                           const data = await res.json().catch(() => ({}));
                           alert(`Ошибка сохранения: ${data?.error || res.status}`);
                         } else {
-                          r.reimbursed = newVal ? "Да" : "Нет";
                           r.__raw.reimbursed = newVal;
                           setSelected((prev) => (prev?.id === r.__raw.id ? { ...prev, reimbursed: newVal } : prev));
                         }
@@ -392,25 +397,33 @@ function DetailModal({
   const [message, setMessage] = React.useState<string | null>(null);
   const [saving, setSaving] = React.useState(false);
   const [deleting, setDeleting] = React.useState(false);
-  const [downloading, setDownloading] = React.useState<string | null>(null);
+  const [viewing, setViewing] = React.useState<string | null>(null);
+  const [viewUrl, setViewUrl] = React.useState<string | null>(null);
 
-  const info = [
-    { label: "Статус", value: status },
-    { label: "Оплата", value: paymentMethod || "—" },
-    { label: "Сумма", value: total },
-    { label: "Пробег", value: mileage || "—" },
-    { label: "Оплатил сам", value: paidByDriver ? "Да" : "Нет" },
-    { label: "Компенсировано", value: reimbursed ? "Да" : "Нет" },
-    { label: "Топливо", value: receipt.fuelType ?? "—" },
-    { label: "Источник", value: receipt.dataSource ?? "—" },
+  // Left column: driver info and metadata
+  const leftInfo = [
+    { label: "Водитель", value: driver?.fullName ?? driver?.telegramUserId ?? "—" },
+    { label: "Авто", value: vehicle?.plateNumber ?? vehicle?.name ?? "—" },
     { label: "Дата", value: formatDate(receipt.receiptAt) },
+    { label: "Источник", value: receipt.dataSource ?? "—" },
+    { label: "Статус", value: status },
+    { label: "Компенсировано", value: reimbursed ? "Да" : "Нет" },
+  ];
+
+  // Right column: receipt details
+  const rightInfo = [
+    { label: "Сумма чека", value: total || "—" },
+    { label: "Литры", value: receipt.liters ? String(receipt.liters) : "—" },
+    { label: "Вид топлива", value: receipt.fuelType ?? "—" },
+    { label: "Стоимость литра", value: receipt.pricePerLiter ? String(receipt.pricePerLiter) : "—" },
+    { label: "Адрес заправки", value: receipt.addressShort ?? "—" },
   ];
 
   const save = async () => {
     setSaving(true);
     setMessage(null);
     try {
-      const res = await fetch(`${process.env.NEXT_PUBLIC_API_BASE ?? process.env.API_BASE_URL ?? "http://localhost:3000"}/api/receipts/${receipt.id}`, {
+      const res = await fetch(`/api/receipts/${receipt.id}`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -447,10 +460,7 @@ function DetailModal({
     <div className={styles.detailOverlay} onClick={onClose}>
       <div className={styles.detailCard} onClick={(e) => e.stopPropagation()}>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-          <div>
-            <h3 style={{ margin: 0 }}>Чек</h3>
-            <div style={{ opacity: 0.7, fontSize: 13 }}>#{receipt.id.slice(0, 8)}...</div>
-          </div>
+          <h3 style={{ margin: 0 }}>Чек</h3>
           <button className={styles.button} onClick={onClose}>
             Закрыть
           </button>
@@ -459,13 +469,14 @@ function DetailModal({
           <button
             className={styles.button}
             onClick={async () => {
-              setDownloading("image");
+              setViewing("image");
               try {
-                const res = await fetch(`${apiBase}/api/receipts/${receipt.id}/file?type=image`, {
+                const res = await fetch(`/api/receipts/${receipt.id}/file?type=image`, {
                   credentials: "include",
                 });
                 if (res.status === 401) {
                   setMessage("Сессия истекла, войдите снова.");
+                  setViewing(null);
                   return;
                 }
                 if (!res.ok) {
@@ -474,31 +485,27 @@ function DetailModal({
                 }
                 const blob = await res.blob();
                 const url = URL.createObjectURL(blob);
-                const a = document.createElement("a");
-                a.href = url;
-                a.download = `receipt_${receipt.id}_image`;
-                a.click();
-                URL.revokeObjectURL(url);
+                setViewUrl(url);
               } catch (err: any) {
-                setMessage(`Ошибка скачивания: ${err?.message ?? err}`);
-              } finally {
-                setDownloading(null);
+                setMessage(`Ошибка загрузки: ${err?.message ?? err}`);
+                setViewing(null);
               }
             }}
-            disabled={downloading === "image"}
+            disabled={viewing === "image"}
           >
-            {downloading === "image" ? "Скачиваю..." : "Скачать фото"}
+            {viewing === "image" ? "Загружаю..." : "Посмотреть фото"}
           </button>
           <button
             className={styles.button}
             onClick={async () => {
-              setDownloading("pdf");
+              setViewing("pdf");
               try {
-                const res = await fetch(`${apiBase}/api/receipts/${receipt.id}/file?type=pdf`, {
+                const res = await fetch(`/api/receipts/${receipt.id}/file?type=pdf`, {
                   credentials: "include",
                 });
                 if (res.status === 401) {
                   setMessage("Сессия истекла, войдите снова.");
+                  setViewing(null);
                   return;
                 }
                 if (!res.ok) {
@@ -507,35 +514,66 @@ function DetailModal({
                 }
                 const blob = await res.blob();
                 const url = URL.createObjectURL(blob);
-                const a = document.createElement("a");
-                a.href = url;
-                a.download = `receipt_${receipt.id}.pdf`;
-                a.click();
-                URL.revokeObjectURL(url);
+                setViewUrl(url);
               } catch (err: any) {
-                setMessage(`Ошибка скачивания: ${err?.message ?? err}`);
-              } finally {
-                setDownloading(null);
+                setMessage(`Ошибка загрузки: ${err?.message ?? err}`);
+                setViewing(null);
               }
             }}
-            disabled={downloading === "pdf"}
+            disabled={viewing === "pdf"}
           >
-            {downloading === "pdf" ? "Скачиваю..." : "Скачать PDF"}
+            {viewing === "pdf" ? "Загружаю..." : "Посмотреть PDF"}
           </button>
         </div>
-        <div className={styles.detailGrid}>
-          <div>
-            <div className={styles.detailRow}>
-              <span className={styles.detailLabel}>Водитель</span>
-              <span className={styles.detailValue}>{driver?.fullName ?? driver?.telegramUserId ?? "—"}</span>
-            </div>
-            <div className={styles.detailRow}>
-              <span className={styles.detailLabel}>Авто</span>
-              <span className={styles.detailValue}>{vehicle?.plateNumber ?? vehicle?.name ?? "—"}</span>
+        {viewUrl && (
+          <div className={styles.viewerOverlay} onClick={() => {
+            URL.revokeObjectURL(viewUrl);
+            setViewUrl(null);
+            setViewing(null);
+          }}>
+            <div className={styles.viewerContent} onClick={(e) => e.stopPropagation()}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+                <h3 style={{ margin: 0 }}>
+                  {viewing === "image" ? "Фото чека" : "PDF чек"}
+                </h3>
+                <button
+                  className={styles.button}
+                  onClick={() => {
+                    URL.revokeObjectURL(viewUrl);
+                    setViewUrl(null);
+                    setViewing(null);
+                  }}
+                >
+                  Закрыть
+                </button>
+              </div>
+              {viewing === "image" ? (
+                <img
+                  src={viewUrl}
+                  alt="Чек"
+                  style={{ maxWidth: "100%", maxHeight: "80vh", objectFit: "contain" }}
+                />
+              ) : (
+                <iframe
+                  src={viewUrl}
+                  style={{ width: "100%", height: "80vh", border: "none" }}
+                  title="PDF чек"
+                />
+              )}
             </div>
           </div>
+        )}
+        <div className={styles.detailGrid}>
           <div>
-            {info.map((i) => (
+            {leftInfo.map((i) => (
+              <div className={styles.detailRow} key={i.label}>
+                <span className={styles.detailLabel}>{i.label}</span>
+                <span className={styles.detailValue}>{i.value}</span>
+              </div>
+            ))}
+          </div>
+          <div>
+            {rightInfo.map((i) => (
               <div className={styles.detailRow} key={i.label}>
                 <span className={styles.detailLabel}>{i.label}</span>
                 <span className={styles.detailValue}>{i.value}</span>
@@ -604,7 +642,7 @@ function DetailModal({
               setMessage(null);
               try {
                 const res = await fetch(
-                  `${process.env.NEXT_PUBLIC_API_BASE ?? process.env.API_BASE_URL ?? "http://localhost:3000"}/api/receipts/${receipt.id}`,
+                  `/api/receipts/${receipt.id}`,
                   {
                     method: "DELETE",
                     credentials: "include",

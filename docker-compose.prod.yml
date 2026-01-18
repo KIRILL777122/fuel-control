@@ -25,6 +25,8 @@ services:
       - db
     ports:
       - "3000:3000" # изменить при желании внешний порт
+    volumes:
+      - ./data:/app/data
     networks:
       - fuelnet
 

@@ -1,5 +1,6 @@
 generator client {
   provider = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
 }
 
 datasource db {
@@ -135,4 +136,20 @@ enum DataSource {
   QR
   MANUAL
   TELEGRAM
+}
+
+model LateDelay {
+  id                String   @id @default(cuid())
+  driverName        String
+  plateNumber       String?
+  routeName         String
+  plannedTime       String?
+  assignedTime      String?
+  delayMinutes      Int
+  delayDate         DateTime
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([delayDate])
+  @@index([driverName, delayDate])
 }

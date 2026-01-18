@@ -3,7 +3,10 @@
 import React from "react";
 import styles from "../page.module.css";
 
-export function DriverForm({ apiBase }: { apiBase: string }) {
+// Use relative URLs so requests go via the same origin (Caddy) and cookies work.
+const API_BASE = "";
+
+export function DriverForm() {
   const [telegramUserId, setTg] = React.useState("");
   const [fullName, setName] = React.useState("");
   const [msg, setMsg] = React.useState<string | null>(null);
@@ -14,14 +17,15 @@ export function DriverForm({ apiBase }: { apiBase: string }) {
     setLoading(true);
     setMsg(null);
     try {
-      const res = await fetch(`${apiBase}/api/drivers`, {
+      const payload = { telegramUserId: telegramUserId.trim(), fullName: fullName.trim() };
+      const res = await fetch(`${API_BASE}/api/drivers`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ telegramUserId, fullName }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
-      setMsg(res.ok ? "Сохранено" : `Ошибка: ${data?.error || res.status}`);
+      setMsg(res.ok ? "Сохранено" : `Ошибка: ${data?.message || data?.error || res.status}`);
     } catch (err: any) {
       setMsg(`Ошибка: ${err?.message ?? err}`);
     } finally {
@@ -57,7 +61,7 @@ export function DriverForm({ apiBase }: { apiBase: string }) {
   );
 }
 
-export function VehicleForm({ apiBase }: { apiBase: string }) {
+export function VehicleForm() {
   const [plateNumber, setPlate] = React.useState("");
   const [name, setName] = React.useState("");
   const [msg, setMsg] = React.useState<string | null>(null);
@@ -68,14 +72,14 @@ export function VehicleForm({ apiBase }: { apiBase: string }) {
     setLoading(true);
     setMsg(null);
     try {
-      const res = await fetch(`${apiBase}/api/vehicles`, {
+      const res = await fetch(`${API_BASE}/api/vehicles`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({ plateNumber, name }),
       });
       const data = await res.json();
-      setMsg(res.ok ? "Сохранено" : `Ошибка: ${data?.error || res.status}`);
+      setMsg(res.ok ? "Сохранено" : `Ошибка: ${data?.message || data?.error || res.status}`);
     } catch (err: any) {
       setMsg(`Ошибка: ${err?.message ?? err}`);
     } finally {

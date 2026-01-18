@@ -6,8 +6,8 @@ COPY package.json package-lock.json* ./
 RUN npm install
 
 COPY tsconfig.json next.config.js ./ 
+RUN mkdir -p public
 COPY app ./app
-COPY public ./public 2>/dev/null || true
 
 RUN npm run build
 

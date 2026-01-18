@@ -1,0 +1,26 @@
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: "Inter", Arial, sans-serif;
+  color: #111;
+  background: #f8f8fb;
+}
+
+/* Sidebar collapsed state - adjust main content margin */
+.main-content {
+  transition: margin-left 0.3s ease;
+}
+
+body[data-sidebar-collapsed="true"] .main-content {
+  margin-left: 64px !important;
+}
+
+@media (max-width: 768px) {
+  .main-content {
+    margin-left: 64px !important;
+  }
+}

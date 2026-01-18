@@ -198,50 +198,19 @@ app.post("/api/drivers", async (req, reply) => {
   const fullName = (body.fullName as string | undefined)?.trim();
   const isActive = body.isActive as boolean | undefined;
 
+  const payload = {
+    telegramUserId,
+    fullName: fullName ?? telegramUserId,
+    isActive: isActive ?? true,
+  };
+
   try {
     req.log.info({ id, telegramUserId }, "driver upsert attempt");
-    
-    // Если редактируем существующего водителя
-    if (id) {
-      const payload = {
-        telegramUserId,
-        fullName: fullName ?? telegramUserId,
-        isActive: isActive ?? true,
-      };
-      const driver = await prisma.driver.update({ where: { id }, data: payload });
-      req.log.info({ id: driver.id, telegramUserId: driver.telegramUserId }, "driver updated");
-      return reply.code(200).send(driver);
-    }
-
-    // Если создаем нового водителя - проверяем, существует ли уже (включая неактивных)
-    const existing = await prisma.driver.findUnique({
-      where: { telegramUserId },
-    });
-
-    if (existing) {
-      // Если существует активный водитель - возвращаем ошибку
-      if (existing.isActive) {
-        return reply.code(400).send({ error: "driver_already_exists", message: "Водитель с таким Telegram ID уже добавлен" });
-      }
-      // Если существует неактивный - активируем и обновляем
-      const payload = {
-        fullName: fullName ?? telegramUserId,
-        isActive: true,
-      };
-      const driver = await prisma.driver.update({ where: { id: existing.id }, data: payload });
-      req.log.info({ id: driver.id, telegramUserId: driver.telegramUserId }, "driver reactivated");
-      return reply.code(200).send(driver);
-    }
-
-    // Создаем нового водителя
-    const payload = {
-      telegramUserId,
-      fullName: fullName ?? telegramUserId,
-      isActive: isActive ?? true,
-    };
-    const driver = await prisma.driver.create({ data: payload });
-    req.log.info({ id: driver.id, telegramUserId: driver.telegramUserId }, "driver created");
-    return reply.code(201).send(driver);
+    const driver = id
+      ? await prisma.driver.update({ where: { id }, data: payload })
+      : await prisma.driver.create({ data: payload });
+    req.log.info({ id: driver.id, telegramUserId: driver.telegramUserId }, "driver saved");
+    return reply.code(id ? 200 : 201).send(driver);
   } catch (err: any) {
     req.log.error({ err, id, telegramUserId }, "driver save error");
     return handlePrismaError(err, reply);
@@ -327,55 +296,14 @@ app.post("/api/vehicles", async (req, reply) => {
 
   try {
     req.log.info({ plateNumber, id }, "vehicle upsert attempt");
-    
-    // Если редактируем существующее авто
-    if (id) {
-      const payload = {
-        name,
-        plateNumber: plateNumber ?? null,
-        sortOrder: sortOrder ?? 0,
-        isActive: isActive ?? true,
-      };
-      const vehicle = await prisma.vehicle.update({ where: { id }, data: payload });
-      req.log.info({ id: vehicle.id, plateNumber: vehicle.plateNumber }, "vehicle updated");
-      return reply.code(200).send(vehicle);
-    }
-
-    // Если создаем новое авто - проверяем, существует ли уже (включая неактивные)
-    const existing = await prisma.vehicle.findUnique({
-      where: { plateNumber },
-    });
-
-    if (existing) {
-      // Если существует активное авто - возвращаем ошибку
-      if (existing.isActive) {
-        return reply.code(400).send({ error: "vehicle_already_exists", message: "Авто с таким госномером уже добавлено" });
-      }
-      // Если существует неактивное - активируем и обновляем
-      const payload = {
-        name,
-        sortOrder: sortOrder ?? existing.sortOrder ?? 0,
-        isActive: true,
-      };
-      const vehicle = await prisma.vehicle.update({ where: { id: existing.id }, data: payload });
-      req.log.info({ id: vehicle.id, plateNumber: vehicle.plateNumber }, "vehicle reactivated");
-      return reply.code(200).send(vehicle);
-    }
-
-    // Создаем новое авто
-    const payload = {
-      name,
-      plateNumber: plateNumber ?? null,
-      sortOrder: sortOrder ?? 0,
-      isActive: isActive ?? true,
-    };
-    const vehicle = await prisma.vehicle.create({ data: payload });
-    req.log.info({ id: vehicle.id, plateNumber: vehicle.plateNumber }, "vehicle created");
-    return reply.code(201).send(vehicle);
+    const vehicle = id
+      ? await prisma.vehicle.update({ where: { id }, data: payload })
+      : await prisma.vehicle.create({ data: payload });
+    req.log.info({ id: vehicle.id, plateNumber: vehicle.plateNumber }, "vehicle saved");
+    return reply.code(id ? 200 : 201).send(vehicle);
   } catch (err: any) {
     req.log.error({ err, plateNumber, id }, "vehicle save error");
     return handlePrismaError(err, reply);
-
   }
 });
 

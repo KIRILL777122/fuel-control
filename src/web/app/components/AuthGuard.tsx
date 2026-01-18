@@ -2,24 +2,17 @@
 
 import React from "react";
 
-const LOGIN = process.env.NEXT_PUBLIC_WEB_ADMIN_LOGIN || process.env.WEB_ADMIN_LOGIN || "admin";
-const PASSWORD = process.env.NEXT_PUBLIC_WEB_ADMIN_PASSWORD || process.env.WEB_ADMIN_PASSWORD || "password";
-const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE_URL ||
-  process.env.NEXT_PUBLIC_API_BASE ||
-  process.env.API_BASE_URL ||
-  "http://localhost:3000";
-
 type Props = { children: React.ReactNode };
 
 export default function AuthGuard({ children }: Props) {
   const [authed, setAuthed] = React.useState(false);
   const [show, setShow] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     const check = async () => {
       try {
-        const res = await fetch(`${API_BASE}/api/auth/me`, { credentials: "include" });
+        const res = await fetch(`/api/auth/me`, { credentials: "include" });
         if (res.ok) setAuthed(true);
       } finally {
         setShow(true);
@@ -33,26 +26,31 @@ export default function AuthGuard({ children }: Props) {
     const form = new FormData(e.currentTarget);
     const login = (form.get("login") as string) || "";
     const pass = (form.get("password") as string) || "";
-    if (login !== LOGIN || pass !== PASSWORD) {
-      alert("Неверный логин/пароль");
-      return;
-    }
+    setError(null);
     try {
-      const res = await fetch(`${API_BASE}/api/auth/login`, {
+      const res = await fetch(`/api/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
         body: JSON.stringify({ login, password: pass }),
       });
-      const data = await res.json();
-      if (res.ok && data?.token) {
+      if (res.status === 401) {
+        setError("Неверный логин/пароль");
+        return;
+      }
+      if (!res.ok) {
+        setError(`Ошибка входа: ${res.status}`);
+        return;
+      }
+      const me = await fetch(`/api/auth/me`, { credentials: "include" });
+      if (me.ok) {
         setAuthed(true);
         window.location.reload();
       } else {
-        alert(`Ошибка входа: ${data?.error || res.status}`);
+        setError("Сессия не установлена");
       }
     } catch (err: any) {
-      alert(`Ошибка: ${err?.message ?? err}`);
+      setError(`Ошибка: ${err?.message ?? err}`);
     }
   };
 
@@ -66,9 +64,10 @@ export default function AuthGuard({ children }: Props) {
         style={{ background: "#fff", padding: 20, borderRadius: 12, boxShadow: "0 8px 30px rgba(0,0,0,0.1)", width: 320 }}
       >
         <h3 style={{ marginTop: 0, marginBottom: 12 }}>Вход</h3>
+        {error && <div style={{ color: "red", marginBottom: 8 }}>{error}</div>}
         <label style={{ display: "block", marginBottom: 8 }}>
           Логин
-          <input name="login" defaultValue="" style={{ width: "100%", padding: 8, borderRadius: 8, border: "1px solid #d7d7e0" }} />
+          <input name="login" defaultValue="" style={{ width: "100%", padding: 8, borderRadius: 8, border: "1px solid #d7d7e0" }} autoComplete="username" />
         </label>
         <label style={{ display: "block", marginBottom: 8 }}>
           Пароль
@@ -77,6 +76,7 @@ export default function AuthGuard({ children }: Props) {
             type="password"
             defaultValue=""
             style={{ width: "100%", padding: 8, borderRadius: 8, border: "1px solid #d7d7e0" }}
+            autoComplete="current-password"
           />
         </label>
         <button type="submit" style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #d7d7e0", background: "#4338ca", color: "#fff" }}>

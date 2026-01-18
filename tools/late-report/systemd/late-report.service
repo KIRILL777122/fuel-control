@@ -1,0 +1,24 @@
+[Unit]
+Description=Late Report Service - Process delays from email and send to Telegram
+After=network.target
+
+[Service]
+Type=oneshot
+User=late-report
+Group=late-report
+EnvironmentFile=/etc/late-report/late-report.env
+WorkingDirectory=/opt/fuel-control/tools/late-report
+ExecStart=/usr/bin/python3 /opt/fuel-control/tools/late-report/src/late_report.py
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=late-report
+
+# Security settings
+PrivateTmp=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/var/lib/late-report /tmp /var/log/late-report
+
+[Install]
+WantedBy=multi-user.target

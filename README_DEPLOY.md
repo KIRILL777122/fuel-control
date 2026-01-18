@@ -7,6 +7,11 @@
    ```bash
    docker compose -f docker-compose.prod.yml --env-file .env.production up -d --build
    ```
+   Быстрая пересборка backend без повторного скачивания (использует кэш npm ci):
+   ```bash
+   docker compose -f docker-compose.prod.yml --env-file .env.production build backend
+   docker compose -f docker-compose.prod.yml --env-file .env.production up -d --force-recreate --no-deps backend
+   ```
 3) Проверка:
    ```bash
    docker compose -f docker-compose.prod.yml --env-file .env.production ps
