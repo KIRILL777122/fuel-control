@@ -1,12 +1,17 @@
-import ReceiptTable from "../components/ReceiptTable";
+import ReceiptsTabs from "../components/ReceiptsTabs";
 import { Driver, Vehicle, Receipt } from "../types";
+import { headers } from "next/headers";
 export const dynamic = "force-dynamic";
 
-const API_BASE_URL = process.env.API_BASE_URL ?? "http://localhost:3000";
+const API_BASE_URL = process.env.API_BASE_URL ?? "http://backend:3000";
 
 async function getJson(path: string) {
   try {
-    const res = await fetch(`${API_BASE_URL}${path}`, { cache: "no-store" });
+    const cookieHeader = headers().get("cookie") || "";
+    const res = await fetch(`${API_BASE_URL}${path}`, {
+      cache: "no-store",
+      headers: cookieHeader ? { Cookie: cookieHeader } : {},
+    });
     const text = await res.text();
     let data: any;
     try {
@@ -31,10 +36,5 @@ export default async function ReceiptsPage() {
   const vehicles: Vehicle[] = Array.isArray(vehiclesRes.data) ? vehiclesRes.data : [];
   const receipts: Receipt[] = Array.isArray(receiptsRes.data) ? receiptsRes.data : [];
 
-  return (
-    <div>
-      <h1 style={{ margin: "0 0 24px 0" }}>Чеки</h1>
-      <ReceiptTable receipts={receipts} drivers={drivers} vehicles={vehicles} />
-    </div>
-  );
+  return <ReceiptsTabs receipts={receipts} drivers={drivers} vehicles={vehicles} />;
 }

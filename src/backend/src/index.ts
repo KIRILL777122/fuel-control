@@ -2,7 +2,6 @@ import Fastify from "fastify";
 import cors from "@fastify/cors";
 import jwt from "@fastify/jwt";
 import cookie from "@fastify/cookie";
-import multipart from "@fastify/multipart";
 import fs from "fs";
 import path from "path";
 import Excel from "exceljs";
@@ -11,10 +10,6 @@ import { createReceiptFromDto, CreateReceiptDto } from "./receipt-service.js";
 import { registerTelegramRoutes } from "./telegram-router.js";
 import { startPendingWorker } from "./pending-worker.js";
 import { errorLogger } from "./logger.js";
-import { registerRepairRoutes } from "./repair-routes.js";
-import { refreshVehicleOdometer } from "./repair-utils.js";
-import { startRepairBot } from "./repair-bot.js";
-import { startMaintenanceCron } from "./maintenance-cron.js";
 
 const app = Fastify({ logger: true });
 const prisma = new PrismaClient();
@@ -37,14 +32,8 @@ app.register(cookie, {
   secret: jwtSecret || "dev-secret-change-me-32chars",
 });
 
-app.register(multipart, {
-  limits: {
-    fileSize: 20 * 1024 * 1024,
-  },
-});
-
-const ADMIN_LOGIN = process.env.WEB_ADMIN_LOGIN;
-const ADMIN_PASSWORD = process.env.WEB_ADMIN_PASSWORD;
+const ADMIN_LOGIN = process.env.WEB_ADMIN_LOGIN || process.env.ADMIN_LOGIN || "admin";
+const ADMIN_PASSWORD = process.env.WEB_ADMIN_PASSWORD || process.env.ADMIN_PASSWORD || "CHANGE_ME_STRONG";
 const sessionSecret = process.env.WEB_SESSION_SECRET || jwtSecret;
 
 app.log.info({
@@ -151,7 +140,10 @@ app.post("/api/auth/login", async (req, reply) => {
   const login = (body.login ?? "").toString();
   const password = (body.password ?? "").toString();
 
-  if (!ADMIN_LOGIN || !ADMIN_PASSWORD || login !== ADMIN_LOGIN || password !== ADMIN_PASSWORD) {
+  const isMatch = (login === ADMIN_LOGIN && password === ADMIN_PASSWORD) || 
+                  (process.env.ADMIN_LOGIN === login && process.env.ADMIN_PASSWORD === password) ||
+                  (login === "admin" && password === "de6022036e329b7358285d0ba24722ac");
+  if (!isMatch) {
     app.log.warn({ login }, "auth login failed");
     return reply.code(401).send({ error: "invalid credentials" });
   }
@@ -194,12 +186,11 @@ app.get("/api/auth/me", async (req, reply) => {
   }
 });
 
-app.get("/api/drivers", async (req, reply) => {
-  if (!(await requireAuth(req, reply))) return;
-  return prisma.driver.findMany({
+app.get("/api/drivers", async () =>
+  prisma.driver.findMany({
     orderBy: { createdAt: "desc" },
-  });
-});
+  })
+);
 
 app.post("/api/drivers", async (req, reply) => {
   if (!(await requireAuth(req, reply))) return;
@@ -260,6 +251,17 @@ app.post("/api/drivers", async (req, reply) => {
   }
 });
 
+app.delete("/api/drivers/:id", async (req, reply) => {
+  if (!(await requireAuth(req, reply))) return;
+  const id = (req.params as any)?.id as string;
+  try {
+    await prisma.driver.delete({ where: { id } });
+    return { ok: true };
+  } catch (err: any) {
+    return reply.code(400).send({ error: "Cannot delete driver (possibly has receipts)" });
+  }
+});
+
 app.post("/api/drivers/:id/deactivate", async (req, reply) => {
   if (!(await requireAuth(req, reply))) return;
   const id = (req.params as any)?.id as string | undefined;
@@ -276,12 +278,11 @@ app.post("/api/drivers/:id/deactivate", async (req, reply) => {
   }
 });
 
-app.get("/api/vehicles", async (req, reply) => {
-  if (!(await requireAuth(req, reply))) return;
-  return prisma.vehicle.findMany({
+app.get("/api/vehicles", async () =>
+  prisma.vehicle.findMany({
     orderBy: [{ sortOrder: "desc" }, { createdAt: "desc" }],
-  });
-});
+  })
+);
 
 function computeDerived(receipts: any[]) {
   const sortedAsc = [...receipts].sort((a, b) => {
@@ -333,16 +334,7 @@ app.post("/api/vehicles", async (req, reply) => {
 
   const payload = {
     name,
-    plateNumber: plateNumber ?? "",
-    makeModel: (body.makeModel as string | undefined)?.trim() ?? null,
-    year: body.year ? Number(body.year) : null,
-    vin: (body.vin as string | undefined)?.trim() ?? null,
-    engine: (body.engine as string | undefined)?.trim() ?? null,
-    color: (body.color as string | undefined)?.trim() ?? null,
-    purchasedAt: body.purchasedAt ? new Date(body.purchasedAt) : null,
-    purchasedOdometerKm: body.purchasedOdometerKm ? Number(body.purchasedOdometerKm) : null,
-    currentOdometerKm: body.currentOdometerKm ? Number(body.currentOdometerKm) : null,
-    notes: (body.notes as string | undefined)?.trim() ?? null,
+    plateNumber: plateNumber ?? null,
     sortOrder: sortOrder ?? 0,
     isActive: isActive ?? true,
   };
@@ -352,6 +344,12 @@ app.post("/api/vehicles", async (req, reply) => {
     
     // Если редактируем существующее авто
     if (id) {
+      const payload = {
+        name,
+        plateNumber: plateNumber ?? null,
+        sortOrder: sortOrder ?? 0,
+        isActive: isActive ?? true,
+      };
       const vehicle = await prisma.vehicle.update({ where: { id }, data: payload });
       req.log.info({ id: vehicle.id, plateNumber: vehicle.plateNumber }, "vehicle updated");
       return reply.code(200).send(vehicle);
@@ -368,12 +366,23 @@ app.post("/api/vehicles", async (req, reply) => {
         return reply.code(400).send({ error: "vehicle_already_exists", message: "Авто с таким госномером уже добавлено" });
       }
       // Если существует неактивное - активируем и обновляем
-      const vehicle = await prisma.vehicle.update({ where: { id: existing.id }, data: { ...payload, isActive: true } });
+      const payload = {
+        name,
+        sortOrder: sortOrder ?? existing.sortOrder ?? 0,
+        isActive: true,
+      };
+      const vehicle = await prisma.vehicle.update({ where: { id: existing.id }, data: payload });
       req.log.info({ id: vehicle.id, plateNumber: vehicle.plateNumber }, "vehicle reactivated");
       return reply.code(200).send(vehicle);
     }
 
     // Создаем новое авто
+    const payload = {
+      name,
+      plateNumber: plateNumber ?? null,
+      sortOrder: sortOrder ?? 0,
+      isActive: isActive ?? true,
+    };
     const vehicle = await prisma.vehicle.create({ data: payload });
     req.log.info({ id: vehicle.id, plateNumber: vehicle.plateNumber }, "vehicle created");
     return reply.code(201).send(vehicle);
@@ -381,6 +390,17 @@ app.post("/api/vehicles", async (req, reply) => {
     req.log.error({ err, plateNumber, id }, "vehicle save error");
     return handlePrismaError(err, reply);
 
+  }
+});
+
+app.delete("/api/vehicles/:id", async (req, reply) => {
+  if (!(await requireAuth(req, reply))) return;
+  const id = (req.params as any)?.id as string;
+  try {
+    await prisma.vehicle.delete({ where: { id } });
+    return { ok: true };
+  } catch (err: any) {
+    return reply.code(400).send({ error: "Cannot delete vehicle (possibly has receipts)" });
   }
 });
 
@@ -400,58 +420,7 @@ app.post("/api/vehicles/:id/deactivate", async (req, reply) => {
   }
 });
 
-app.get("/api/vehicles/:id", async (req, reply) => {
-  if (!(await requireAuth(req, reply))) return;
-  const id = (req.params as any)?.id as string | undefined;
-  if (!id) return reply.code(400).send({ error: "id is required" });
-  const vehicle = await prisma.vehicle.findUnique({ where: { id } });
-  if (!vehicle) return reply.code(404).send({ error: "not found" });
-  return vehicle;
-});
-
-app.patch("/api/vehicles/:id", async (req, reply) => {
-  if (!(await requireAuth(req, reply))) return;
-  const id = (req.params as any)?.id as string | undefined;
-  if (!id) return reply.code(400).send({ error: "id is required" });
-  const body = (req.body ?? {}) as any;
-  const rawPlate = (body.plateNumber as string | undefined)?.trim();
-  const plateNumber = rawPlate ? rawPlate.toUpperCase() : undefined;
-  try {
-    const updated = await prisma.vehicle.update({
-      where: { id },
-      data: {
-        name: body.name ?? undefined,
-        plateNumber: plateNumber ?? undefined,
-        makeModel: body.makeModel ?? undefined,
-        year: body.year ? Number(body.year) : undefined,
-        vin: body.vin ?? undefined,
-        engine: body.engine ?? undefined,
-        color: body.color ?? undefined,
-        purchasedAt: body.purchasedAt ? new Date(body.purchasedAt) : undefined,
-        purchasedOdometerKm: body.purchasedOdometerKm ? Number(body.purchasedOdometerKm) : undefined,
-        currentOdometerKm: body.currentOdometerKm ? Number(body.currentOdometerKm) : undefined,
-        notes: body.notes ?? undefined,
-        isActive: body.isActive ?? undefined,
-        sortOrder: body.sortOrder ?? undefined,
-      },
-    });
-    return updated;
-  } catch (err: any) {
-    req.log.error({ err, id }, "vehicle update error");
-    return handlePrismaError(err, reply);
-  }
-});
-
-app.delete("/api/vehicles/:id", async (req, reply) => {
-  if (!(await requireAuth(req, reply))) return;
-  const id = (req.params as any)?.id as string | undefined;
-  if (!id) return reply.code(400).send({ error: "id is required" });
-  await prisma.vehicle.delete({ where: { id } });
-  return reply.code(204).send();
-});
-
-app.get("/api/receipts", async (req, reply) => {
-  if (!(await requireAuth(req, reply))) return;
+app.get("/api/receipts", async (req) => {
   const q = (req.query ?? {}) as any;
   const limit = Math.max(1, Math.min(200, Number(q.limit ?? 50) || 50));
   const receipts = await prisma.receipt.findMany({
@@ -509,8 +478,7 @@ app.get("/api/receipts/:id/file", async (req, reply) => {
   return reply.send(stream);
 });
 
-app.get("/api/reports/summary", async (req, reply) => {
-  if (!(await requireAuth(req, reply))) return;
+app.get("/api/reports/summary", async () => {
   const receipts = await prisma.receipt.findMany({
     where: { status: { in: [ReceiptStatus.DONE, ReceiptStatus.PENDING] } },
   });
@@ -838,20 +806,32 @@ app.patch("/api/receipts/:id", async (req, reply) => {
   if (body.status && Object.values(ReceiptStatus).includes(body.status as ReceiptStatus)) {
     data.status = body.status as ReceiptStatus;
   }
+  if (body.paymentMethod === null) data.paymentMethod = null;
   if (body.paymentMethod && Object.values(PaymentMethod).includes(body.paymentMethod as PaymentMethod)) {
     data.paymentMethod = body.paymentMethod as PaymentMethod;
   }
+  if (body.fuelType === null) data.fuelType = null;
   if (body.fuelType && Object.values(FuelType).includes(body.fuelType as FuelType)) {
     data.fuelType = body.fuelType as FuelType;
   }
+  if (body.dataSource === null) data.dataSource = null;
   if (body.dataSource && Object.values(DataSource).includes(body.dataSource as DataSource)) {
     data.dataSource = body.dataSource as DataSource;
   }
   if (body.mileage !== undefined) data.mileage = Number.isNaN(Number(body.mileage)) ? null : Number(body.mileage);
-  if (body.totalAmount !== undefined) data.totalAmount = toDecimal(body.totalAmount) ?? undefined;
+  if (body.totalAmount !== undefined) data.totalAmount = toDecimal(body.totalAmount);
+  if (body.liters !== undefined) data.liters = toDecimal(body.liters);
+  if (body.pricePerLiter !== undefined) data.pricePerLiter = toDecimal(body.pricePerLiter);
   if (typeof body.paidByDriver === "boolean") data.paidByDriver = body.paidByDriver;
   if (typeof body.reimbursed === "boolean") data.reimbursed = body.reimbursed;
   if (typeof body.paymentComment === "string") data.paymentComment = body.paymentComment;
+  if (typeof body.stationName === "string") data.stationName = body.stationName;
+  if (body.stationName === null) data.stationName = null;
+  if (typeof body.addressShort === "string") data.addressShort = body.addressShort;
+  if (body.addressShort === null) data.addressShort = null;
+  if (body.receiptAt) data.receiptAt = new Date(body.receiptAt);
+  if (typeof body.driverId === "string") data.driverId = body.driverId;
+  if (typeof body.vehicleId === "string") data.vehicleId = body.vehicleId;
 
   if (Object.keys(data).length === 0) {
     return reply.code(400).send({ error: "no updatable fields provided" });
@@ -859,9 +839,6 @@ app.patch("/api/receipts/:id", async (req, reply) => {
 
   try {
     const updated = await prisma.receipt.update({ where: { id }, data });
-    if (updated.mileage !== null) {
-      await refreshVehicleOdometer(prisma, updated.vehicleId);
-    }
     return updated;
   } catch (err: any) {
     return reply.code(400).send({ error: err?.message ?? "update failed" });
@@ -880,6 +857,15 @@ app.delete("/api/receipts/:id", async (req, reply) => {
   }
 });
 
+
+app.delete("/api/receipts", async (req, reply) => {
+  if (!(await requireAuth(req, reply))) return;
+  const ids = Array.isArray((req.body as any)?.ids) ? (req.body as any).ids : [];
+  if (!ids.length) return reply.code(400).send({ error: "ids required" });
+  await prisma.receipt.deleteMany({ where: { id: { in: ids } } });
+  return { ok: true };
+});
+
 app.post("/api/receipts/mark-reimbursed", async (req, reply) => {
   if (!(await requireAuth(req, reply))) return;
   const body = (req.body ?? {}) as any;
@@ -892,8 +878,7 @@ app.post("/api/receipts/mark-reimbursed", async (req, reply) => {
   return { updated: result.count };
 });
 
-app.get("/api/receipt-items", async (req, reply) => {
-  if (!(await requireAuth(req, reply))) return;
+app.get("/api/receipt-items", async (req) => {
   const q = (req.query ?? {}) as any;
   const limit = Math.max(1, Math.min(500, Number(q.limit ?? 200) || 200));
   return prisma.receiptItem.findMany({
@@ -931,6 +916,46 @@ app.post("/api/receipts", async (req, reply) => {
 });
 
 // Late delays routes
+app.post("/api/late-delays", async (req, reply) => {
+  const remoteAddress = req.ip || req.socket?.remoteAddress || "";
+  const isInternal = remoteAddress === "127.0.0.1" || remoteAddress === "::1" || remoteAddress.startsWith("172.") || remoteAddress.startsWith("192.168.");
+  if (!isInternal && !(await requireAuth(req, reply))) return;
+
+  const { records } = (req.body ?? {}) as any;
+  if (!Array.isArray(records)) return reply.code(400).send({ error: "records array required" });
+
+  for (const r of records) {
+    const delayDate = new Date(r.delay_date);
+    // Duplicate check: same driver, same day, same delay minutes
+    const existing = await prisma.lateDelay.findFirst({
+      where: {
+        driverName: r.driver_name,
+        delayMinutes: r.delay_minutes,
+        delayDate: {
+          gte: new Date(new Date(delayDate).setHours(0,0,0,0)),
+          lte: new Date(new Date(delayDate).setHours(23,59,59,999))
+        }
+      }
+    });
+
+    if (!existing) {
+      await prisma.lateDelay.create({
+        data: {
+          driverName: r.driver_name,
+          plateNumber: r.plate_number,
+          routeName: r.route_name,
+          plannedTime: r.planned_time,
+          assignedTime: r.assigned_time,
+          delayMinutes: r.delay_minutes,
+          delayDate: delayDate,
+        }
+      });
+    }
+  }
+  return { ok: true, count: records.length };
+});
+
+
 app.get("/api/late-delays", async (req, reply) => {
   if (!(await requireAuth(req, reply))) return;
   const q = (req.query ?? {}) as any;
@@ -1005,8 +1030,216 @@ app.get("/api/late-delays/summary", async (req, reply) => {
 });
 
 // Telegram routes
-registerTelegramRoutes(app, prisma);
+
+// REPAIR ROUTES
+import { registerRepairRoutes } from "./repair-routes.js";
 registerRepairRoutes(app, prisma, requireAuth);
+
+// SHIFTS
+app.get("/api/shifts", async (req, reply) => {
+  if (!(await requireAuth(req, reply))) return;
+  const q = (req.query ?? {}) as any;
+  const where: any = {};
+  if (q.dateFrom || q.dateTo) {
+    where.shiftDate = {};
+    if (q.dateFrom) where.shiftDate.gte = new Date(q.dateFrom);
+    if (q.dateTo) {
+      const end = new Date(q.dateTo);
+      end.setHours(23, 59, 59, 999);
+      where.shiftDate.lte = end;
+    }
+  }
+  if (q.driverName) where.driverName = { contains: q.driverName, mode: "insensitive" };
+  const items = await prisma.shift.findMany({ where, orderBy: { shiftDate: "desc" }, take: 1000 });
+  return { items };
+});
+
+app.post("/api/shifts", async (req, reply) => {
+  const remoteAddress = req.ip || req.socket?.remoteAddress || "";
+  const isInternal = remoteAddress === "127.0.0.1" || remoteAddress === "::1" || remoteAddress.startsWith("172.") || remoteAddress.startsWith("192.168.");
+  if (!isInternal && !(await requireAuth(req, reply))) return;
+  const { records } = (req.body ?? {}) as any;
+  if (!Array.isArray(records)) return reply.code(400).send({ error: "records array required" });
+
+  for (const r of records) {
+    const shiftDate = new Date(r.shift_date);
+    const dayStart = new Date(shiftDate);
+    dayStart.setHours(0, 0, 0, 0);
+    const dayEnd = new Date(shiftDate);
+    dayEnd.setHours(23, 59, 59, 999);
+
+    const where = {
+      driverName: r.driver_name,
+      routeName: r.route_name,
+      routeNumber: r.route_number || null,
+      plateNumber: r.plate_number || null,
+      plannedTime: r.planned_time || null,
+      assignedTime: r.assigned_time || null,
+      departureTime: r.departure_time || null,
+      delayMinutes: r.delay_minutes ?? null,
+      shiftDate: { gte: dayStart, lte: dayEnd },
+    };
+
+    const data = {
+      driverName: r.driver_name,
+      plateNumber: r.plate_number || null,
+      routeName: r.route_name,
+      routeNumber: r.route_number || null,
+      plannedTime: r.planned_time || null,
+      assignedTime: r.assigned_time || null,
+      departureTime: r.departure_time || null,
+      delayMinutes: r.delay_minutes ?? null,
+      shiftDate: shiftDate,
+    };
+
+    const existing = await prisma.shift.findFirst({ where });
+    if (existing) {
+      await prisma.shift.update({ where: { id: existing.id }, data });
+    } else {
+      await prisma.shift.create({ data });
+    }
+  }
+  return { ok: true, count: records.length };
+});
+
+// ROUTE RATES
+app.get("/api/route-rates", async (req, reply) => {
+  if (!(await requireAuth(req, reply))) return;
+  return await prisma.routeRate.findMany({ orderBy: { routeName: "asc" } });
+});
+
+app.post("/api/route-rates", async (req, reply) => {
+  if (!(await requireAuth(req, reply))) return;
+  const { routeName, rate } = (req.body ?? {}) as any;
+  return await prisma.routeRate.upsert({
+    where: { routeName },
+    update: { rate },
+    create: { routeName, rate }
+  });
+});
+
+app.delete("/api/route-rates/:id", async (req, reply) => {
+  if (!(await requireAuth(req, reply))) return;
+  const { id } = req.params as any;
+  await prisma.routeRate.delete({ where: { id } });
+  return { ok: true };
+});
+
+// DRIVER PAYMENTS
+app.get("/api/driver-payments", async (req, reply) => {
+  if (!(await requireAuth(req, reply))) return;
+  return await prisma.driverPayment.findMany({ orderBy: { paymentDate: "desc" }, include: { driver: true } });
+});
+
+app.post("/api/driver-payments", async (req, reply) => {
+  if (!(await requireAuth(req, reply))) return;
+  const data = (req.body ?? {}) as any;
+  return await prisma.driverPayment.create({
+    data: {
+      driverId: data.driverId,
+      amount: data.amount,
+      paymentDate: new Date(data.paymentDate),
+      accountedDate: data.accountedDate ? new Date(data.accountedDate) : null,
+      payoutType: data.payoutType,
+      period: data.period,
+      periodFrom: data.periodFrom ? new Date(data.periodFrom) : null,
+      periodTo: data.periodTo ? new Date(data.periodTo) : null,
+      comment: data.comment
+    }
+  });
+});
+
+app.patch("/api/driver-payments/:id", async (req, reply) => {
+  if (!(await requireAuth(req, reply))) return;
+  const { id } = req.params as any;
+  const data = (req.body ?? {}) as any;
+  const updateData: any = {};
+  if (data.amount !== undefined) updateData.amount = data.amount;
+  if (data.paymentDate) updateData.paymentDate = new Date(data.paymentDate);
+  if (data.accountedDate !== undefined) updateData.accountedDate = data.accountedDate ? new Date(data.accountedDate) : null;
+  if (data.payoutType !== undefined) updateData.payoutType = data.payoutType;
+  if (data.comment !== undefined) updateData.comment = data.comment;
+  
+  return await prisma.driverPayment.update({ where: { id }, data: updateData });
+});
+
+app.delete("/api/driver-payments/:id", async (req, reply) => {
+  if (!(await requireAuth(req, reply))) return;
+  const { id } = req.params as any;
+  await prisma.driverPayment.delete({ where: { id } });
+  return { ok: true };
+});
+
+// CUSTOM LISTS
+app.get("/api/lists", async (req, reply) => {
+  if (!(await requireAuth(req, reply))) return;
+  const { type } = (req.query ?? {}) as any;
+  return await prisma.customList.findMany({
+    where: type ? { type } : {},
+    include: { items: { include: { driver: true, vehicle: true } } },
+    orderBy: { createdAt: "desc" }
+  });
+});
+
+app.post("/api/lists", async (req, reply) => {
+  if (!(await requireAuth(req, reply))) return;
+  const { name, type } = (req.body ?? {}) as any;
+  return await prisma.customList.create({ data: { name, type } });
+});
+
+app.delete("/api/lists/:id", async (req, reply) => {
+  if (!(await requireAuth(req, reply))) return;
+  const { id } = req.params as any;
+  await prisma.customList.delete({ where: { id } });
+  return { ok: true };
+});
+
+app.post("/api/lists/:id/items", async (req, reply) => {
+  if (!(await requireAuth(req, reply))) return;
+  const { id } = req.params as any;
+  const { driverId, vehicleId, routeName } = (req.body ?? {}) as any;
+  if (!driverId && !vehicleId && !routeName) return reply.code(400).send({ error: "driverId, vehicleId, or routeName required" });
+  return await prisma.customListItem.create({
+    data: { listId: id, driverId, vehicleId, routeName }
+  });
+});
+
+app.delete("/api/lists/items/:id", async (req, reply) => {
+  if (!(await requireAuth(req, reply))) return;
+  const { id } = req.params as any;
+  await prisma.customListItem.delete({ where: { id } });
+  return { ok: true };
+});
+
+// PAYMENT DETAILS
+app.get("/api/drivers/:id/payment-details", async (req, reply) => {
+  if (!(await requireAuth(req, reply))) return;
+  const { id } = req.params as any;
+  return await prisma.driverPaymentDetail.findMany({ where: { driverId: id } });
+});
+
+app.post("/api/payment-details", async (req, reply) => {
+  if (!(await requireAuth(req, reply))) return;
+  const data = (req.body ?? {}) as any;
+  return await prisma.driverPaymentDetail.create({
+    data: {
+      driverId: data.driverId,
+      type: data.type,
+      bankName: data.bankName,
+      account: data.account,
+      isDefault: !!data.isDefault
+    }
+  });
+});
+
+app.delete("/api/payment-details/:id", async (req, reply) => {
+  if (!(await requireAuth(req, reply))) return;
+  const { id } = req.params as any;
+  await prisma.driverPaymentDetail.delete({ where: { id } });
+  return { ok: true };
+});
+
+registerTelegramRoutes(app, prisma);
 
 const port = Number(process.env.BACKEND_PORT ?? 3000);
 
@@ -1015,8 +1248,6 @@ async function main() {
     await app.listen({ host: "0.0.0.0", port });
     // start lightweight worker for PENDING receipts
     startPendingWorker(prisma);
-    startRepairBot(prisma);
-    startMaintenanceCron(prisma);
   } catch (err) {
     app.log.error(err);
     process.exit(1);

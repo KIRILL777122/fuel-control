@@ -7,7 +7,6 @@ import {
   PaymentMethod,
   DataSource,
 } from "@prisma/client";
-import { refreshVehicleOdometer } from "./repair-utils.js";
 
 export type ReceiptItemInput = {
   name: string;
@@ -107,7 +106,6 @@ export async function createReceiptFromDto(prisma: PrismaClient, dto: CreateRece
 
   const plate = vehiclePayload.plateNumber ?? null;
   const vname = vehiclePayload.name ?? null;
-  const fallbackPlate = plate || vname || `UNKNOWN-${Date.now()}`;
 
   const foundVehicle =
     (plate &&
@@ -120,18 +118,18 @@ export async function createReceiptFromDto(prisma: PrismaClient, dto: CreateRece
       })));
 
   const vehicle = foundVehicle
-      ? await prisma.vehicle.update({
+    ? await prisma.vehicle.update({
         where: { id: foundVehicle.id },
         data: {
-          plateNumber: plate ?? foundVehicle.plateNumber,
-          name: vname ?? foundVehicle.name,
+          plateNumber: plate ?? foundVehicle.plateNumber ?? "Unknown",
+          name: vname ?? foundVehicle.name ?? "Unknown",
           isActive: true,
         },
       })
     : await prisma.vehicle.create({
         data: {
           name: vname ?? plate ?? "Unknown vehicle",
-          plateNumber: fallbackPlate,
+          plateNumber: plate ?? "UNKNOWN",
           isActive: true,
         },
       });
@@ -191,7 +189,7 @@ export async function createReceiptFromDto(prisma: PrismaClient, dto: CreateRece
     await prisma.receiptItem.createMany({
       data: itemsPayload.map((it) => ({
         receiptId: receipt.id,
-        name: it.name,
+        name: it.name ?? "Unknown item",
         quantity: toDecimal(it.quantity),
         unitPrice: toDecimal(it.unitPrice),
         amount: toDecimal(it.amount),
@@ -199,10 +197,6 @@ export async function createReceiptFromDto(prisma: PrismaClient, dto: CreateRece
         createdAt: new Date(),
       })),
     });
-  }
-
-  if (receipt.mileage !== null) {
-    await refreshVehicleOdometer(prisma, vehicle.id);
   }
 
   return {

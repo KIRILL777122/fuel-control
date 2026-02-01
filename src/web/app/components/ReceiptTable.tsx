@@ -67,6 +67,7 @@ export default function ReceiptTable({
   const [driverSearch, setDriverSearch] = React.useState<string>("");
   const [vehicleSearch, setVehicleSearch] = React.useState<string>("");
   const [selected, setSelected] = React.useState<Receipt | null>(null);
+  const [selectedIds, setSelectedIds] = React.useState<string[]>([]);
   const [exportingCsv, setExportingCsv] = React.useState(false);
   const [exportingXlsx, setExportingXlsx] = React.useState(false);
 
@@ -282,6 +283,9 @@ export default function ReceiptTable({
         <table className={styles.table}>
           <thead>
             <tr>
+              <th className={styles.th} style={{ width: 36 }}>
+                <input type="checkbox" checked={sortedData.length > 0 && sortedData.every(r => selectedIds.includes(r.id))} onChange={toggleAllSelected} />
+              </th>
               {columns.map((c) => (
                 <th key={c.key} className={styles.th}>
                   {c.title}

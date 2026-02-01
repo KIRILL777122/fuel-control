@@ -18,13 +18,13 @@ export default function Sidebar() {
   }, [collapsed]);
 
   const menuItems = [
-    { path: "/", label: "Сводка", icon: "📊" },
-    { path: "/vehicles", label: "Авто", icon: "🚗" },
-    { path: "/drivers", label: "Водители", icon: "🧑‍✈️" },
-    { path: "/repairs", label: "Ремонт", icon: "🔧" },
-    { path: "/compensations", label: "Компенсация", icon: "💰" },
+    { path: "/add", label: "Авто и водители", icon: "🧑‍✈️" },
     { path: "/receipts", label: "Чеки", icon: "🧾" },
+    { path: "/compensations", label: "Компенсация", icon: "💰" },
+    { path: "/repairs", label: "Ремонт", icon: "🔧" },
     { path: "/late", label: "Опоздания", icon: "⏰" },
+    { path: "/shifts", label: "График смен", icon: "📅" },
+    { path: "/payments", label: "Оплата", icon: "💵" },
   ];
 
   const handleLogout = () => {
