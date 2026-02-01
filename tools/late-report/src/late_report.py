@@ -429,11 +429,11 @@ determine_report_type = detect_report_type
 
 
 
-def get_email_attachments(config: Dict) -> List[Tuple[int, int, str, bytes]]:
+def get_email_attachments(config: Dict) -> List[Tuple[int, int, str, bytes, Optional[datetime]]]:
     """Получение XLSX вложений из писем за последние lookback дней
     
     Returns:
-        List[Tuple[uid, attachment_index, filename, file_data]]
+        List[Tuple[uid, attachment_index, filename, file_data, internaldate]]
     """
     if not config['imap_user'] or not config['imap_pass']:
         logger.error("IMAP credentials not set")
@@ -533,7 +533,8 @@ def get_email_attachments(config: Dict) -> List[Tuple[int, int, str, bytes]]:
                                     try:
                                         file_data = part.get_payload(decode=True)
                                         if file_data:
-                                            attachments.append((uid, attachment_index, filename or f"mail_{uid}.xlsx", file_data))
+                                            internaldate = msg_data.get(b'INTERNALDATE')
+                                            attachments.append((uid, attachment_index, filename or f"mail_{uid}.xlsx", file_data, internaldate))
                                             logger.debug(f"Found Excel attachment: UID {uid}, INTERNALDATE {internaldate_str}, filename={filename[:50] if filename else 'N/A'}, index {attachment_index}, content-type: {content_type}")
                                             attachment_index += 1
                                     except Exception as e:
@@ -1257,6 +1258,57 @@ def send_telegram_text(config: Dict, text: str):
         return False
 
 
+def save_late_delays_to_api(config: Dict, records: List[Dict], delay_date: datetime) -> bool:
+    """Сохранение записей об опозданиях в базу данных через API"""
+    api_base = os.getenv('API_BASE_URL', 'http://localhost:3000')
+    
+    if not api_base:
+        logger.warning("API_BASE_URL not set, skipping database save")
+        return False
+    
+    try:
+        # Формируем записи для API
+        api_records = []
+        for record in records:
+            api_record = {
+                'driver_name': record.get('driver_name', ''),
+                'plate_number': record.get('plate_number', ''),
+                'route_name': record.get('route_name', ''),
+                'planned_time': record.get('planned_time', ''),
+                'assigned_time': record.get('assigned_time', ''),
+                'delay_minutes': record.get('delay_minutes', 0),
+                'delay_date': delay_date.isoformat(),
+            }
+            api_records.append(api_record)
+        
+        if not api_records:
+            logger.warning("No records to save")
+            return False
+        
+        # Отправляем POST запрос (без аутентификации для localhost)
+        url = f"{api_base}/api/late-delays"
+        headers = {
+            'Content-Type': 'application/json',
+        }
+        
+        response = requests.post(url, json={'records': api_records}, headers=headers, timeout=10)
+        
+        if response.status_code in (200, 201):
+            result = response.json()
+            saved_count = result.get('saved', len(api_records))
+            logger.info(f"Successfully saved {saved_count} late delay records to database")
+            return True
+        else:
+            logger.error(f"Failed to save late delays to API: {response.status_code} {response.text}")
+            return False
+            
+    except Exception as e:
+        logger.error(f"Error saving late delays to API: {e}")
+        import traceback
+        traceback.print_exc()
+        return False
+
+
 def send_telegram_message(config: Dict, text: str, topic_id: Optional[int] = None):
     """Отправка текстового сообщения в Telegram в указанную тему"""
     if not config['tg_token'] or not config['tg_chat_id']:
@@ -1321,7 +1373,7 @@ def get_file_hash(file_data: bytes) -> str:
     return hashlib.sha256(file_data).hexdigest()
 
 
-def process_docs_report(config: Dict, attachments: List[Tuple[int, int, str, bytes]], processed_keys: Dict[str, float]) -> None:
+def process_docs_report(config: Dict, attachments: List[Tuple[int, int, str, bytes, Optional[datetime]]], processed_keys: Dict[str, float]) -> None:
     """Обработка docs-report (отстающие документы)"""
     if not config['run_docs_report']:
         logger.info("Docs-report disabled (RUN_DOCS_REPORT=0)")
@@ -1331,7 +1383,7 @@ def process_docs_report(config: Dict, attachments: List[Tuple[int, int, str, byt
     
     all_docs_dfs = []
     
-    for uid, att_index, filename, file_data in attachments:
+    for uid, att_index, filename, file_data, internaldate in attachments:
         # Генерируем ключ для вложения
         file_hash = hashlib.sha256(file_data).hexdigest()
         attachment_key = f"{uid}:{att_index}:{file_hash}"
@@ -1540,7 +1592,7 @@ def main():
     new_attachments = []
     skipped_count = 0
     
-    for uid, att_index, filename, file_data in attachments:
+    for uid, att_index, filename, file_data, _internaldate in attachments:
         # Генерируем ключ для вложения: uid:att_index:sha256
         file_hash = hashlib.sha256(file_data).hexdigest()
         attachment_key = f"{uid}:{att_index}:{file_hash}"
@@ -1552,7 +1604,10 @@ def main():
                 skipped_count += 1
                 continue
         
-        new_attachments.append((uid, att_index, filename, file_data))
+        internaldate = locals().get('internaldate')
+        if internaldate is None:
+            internaldate = datetime.now(ZoneInfo(config.get('report_tz', 'UTC')))
+        new_attachments.append((uid, att_index, filename, file_data, internaldate))
     
     logger.info(f"Filtered: {skipped_count} already processed, {len(new_attachments)} new attachments to process")
     
@@ -1560,11 +1615,11 @@ def main():
         logger.info("No new attachments to process")
         return
     
-    # Получаем today_msk для фильтрации DOCS по токену даты
+    # Получаем today_msk для фильтрации DOCS по токенам даты
     # Если задан DOCS_DATE_TOKEN - используем его (для тестов)
     if config.get('docs_date_token'):
-        date_token = config['docs_date_token']
-        logger.info(f"DOCS date_token filter (override): {date_token}")
+        date_tokens = [config['docs_date_token']]
+        logger.info(f"DOCS date_token filter (override): {date_tokens[0]}")
     else:
         report_tz = config.get('report_tz', 'Europe/Moscow')
         try:
@@ -1572,14 +1627,18 @@ def main():
         except Exception:
             tz = ZoneInfo('UTC')
         today_msk = datetime.now(tz).date()
-        date_token = today_msk.strftime("%Y_%d_%m")  # формат 2026_17_01
-        logger.info(f"DOCS date_token filter: {date_token} (today_msk={today_msk})")
+        lookback_days = config.get('imap_lookback_days', 3)
+        date_tokens = [
+            (today_msk - timedelta(days=i)).strftime("%Y_%d_%m")
+            for i in range(0, max(1, lookback_days))
+        ]
+        logger.info(f"DOCS date_token filter: {', '.join(date_tokens)} (today_msk={today_msk})")
     
     # Разделение на late и docs отчёты
     late_attachments = []
     docs_attachments = []
     
-    for uid, att_index, filename, file_data in new_attachments:
+    for uid, att_index, filename, file_data, internaldate in new_attachments:
         try:
             # Быстрая проверка типа отчёта
             # Сначала пробуем парсить как late-report
@@ -1588,28 +1647,72 @@ def main():
             
             # Для DOCS: дополнительная проверка по токену даты в имени файла
             if report_type == 'docs':
-                # Проверяем, содержит ли filename токен даты (даже если кракозябры, цифры сохраняются)
+                # Проверяем, содержит ли filename любой токен даты (даже если кракозябры, цифры сохраняются)
                 filename_str = str(filename) if filename else ''
-                if date_token in filename_str:
-                    docs_attachments.append((uid, att_index, filename, file_data))
-                    logger.info(f"DOCS matched date_token={date_token}: UID {uid}, filename={filename[:50] if filename else 'N/A'}")
+                matched_token = next((t for t in date_tokens if t in filename_str), None)
+                if matched_token:
+                    docs_attachments.append((uid, att_index, filename, file_data, internaldate))
+                    logger.info(f"DOCS matched date_token={matched_token}: UID {uid}, filename={filename[:50] if filename else 'N/A'}")
                 else:
-                    logger.debug(f"DOCS skipped (no date_token match): UID {uid}, filename={filename[:50] if filename else 'N/A'}, date_token={date_token}")
+                    logger.debug(f"DOCS skipped (no date_token match): UID {uid}, filename={filename[:50] if filename else 'N/A'}")
             elif report_type == 'late':
-                late_attachments.append((uid, att_index, filename, file_data))
+                late_attachments.append((uid, att_index, filename, file_data, internaldate))
             else:
-                logger.warning(f"Unknown report type for {filename} (UID {uid}), skipping")
+                # Если тип не определился, но файл выглядит как docs (по токену даты) — считаем его docs
+                filename_str = str(filename) if filename else ''
+                matched_token = next((t for t in date_tokens if t in filename_str), None)
+                if matched_token:
+                    docs_attachments.append((uid, att_index, filename, file_data, internaldate))
+                    logger.info(f"DOCS matched date_token={matched_token} for unknown type: UID {uid}, filename={filename[:50] if filename else 'N/A'}")
+                else:
+                    logger.warning(f"Unknown report type for {filename} (UID {uid}), skipping")
         except Exception as e:
             logger.debug(f"Failed to determine report type for {filename} (UID {uid}): {e}, will try both parsers")
             # Если не определили - пробуем оба типа (но для docs всё равно нужен date_token)
-            late_attachments.append((uid, att_index, filename, file_data))
+            late_attachments.append((uid, att_index, filename, file_data, internaldate))
             # Для docs проверяем date_token
             filename_str = str(filename) if filename else ''
-            if date_token in filename_str:
-                docs_attachments.append((uid, att_index, filename, file_data))
-                logger.debug(f"DOCS matched date_token={date_token} (fallback): UID {uid}")
+            matched_token = next((t for t in date_tokens if t in filename_str), None)
+            if matched_token:
+                docs_attachments.append((uid, att_index, filename, file_data, internaldate))
+                logger.debug(f"DOCS matched date_token={matched_token} (fallback): UID {uid}")
     
     logger.info(f"Classified: {len(late_attachments)} LATE, {len(docs_attachments)} DOCS attachments")
+
+    if late_attachments:
+        report_tz = config.get('report_tz', 'Europe/Moscow')
+        try:
+            tz = ZoneInfo(report_tz)
+        except Exception:
+            tz = ZoneInfo('UTC')
+
+        def to_report_date(value: Optional[datetime]) -> Optional[datetime.date]:
+            if not value:
+                return None
+            if isinstance(value, datetime):
+                if value.tzinfo is None:
+                    value = value.replace(tzinfo=ZoneInfo('UTC'))
+                return value.astimezone(tz).date()
+            return None
+
+        dates = [to_report_date(d) for *_rest, d in late_attachments if to_report_date(d)]
+        latest_date = max(dates) if dates else None
+        if latest_date:
+            filtered = []
+            skipped = 0
+            for uid, att_index, filename, file_data, internaldate in late_attachments:
+                att_date = to_report_date(internaldate)
+                if att_date == latest_date:
+                    filtered.append((uid, att_index, filename, file_data, internaldate))
+                else:
+                    file_hash = hashlib.sha256(file_data).hexdigest()
+                    attachment_key = f"{uid}:{att_index}:{file_hash}"
+                    processed_keys[attachment_key] = time.time()
+                    skipped += 1
+            if skipped:
+                save_processed_keys(config['state_file'], processed_keys)
+            late_attachments = filtered
+            logger.info(f"Filtered late-report by latest date {latest_date}: kept {len(filtered)}, skipped {skipped}")
     
     # Обработка late-report
     all_late_records = []
@@ -1619,7 +1722,7 @@ def main():
     if config['run_late_report'] and late_attachments:
         logger.info(f"Processing {len(late_attachments)} late-report attachments")
         
-        for uid, att_index, filename, file_data in late_attachments:
+        for uid, att_index, filename, file_data, _internaldate in late_attachments:
             # Генерируем ключ для вложения
             file_hash = hashlib.sha256(file_data).hexdigest()
             attachment_key = f"{uid}:{att_index}:{file_hash}"
@@ -1653,20 +1756,23 @@ def main():
                 
                 if normalized_records:
                     all_late_records.extend(normalized_records)
-                    # Добавляем ключ в processed_keys после успешной обработки
-                    processed_keys[attachment_key] = time.time()
                     logger.info(f"Found {len(normalized_records)} late records in {filename} (UID {uid}, key: {attachment_key[:20]}...)")
                 else:
-                    # Даже если нет опоздавших, помечаем файл как обработанный
-                    processed_keys[attachment_key] = time.time()
                     logger.info(f"No late records in {filename} (UID {uid}), but file processed")
+                
+                # Сохраняем ключ СРАЗУ после обработки файла (независимо от отправки)
+                processed_keys[attachment_key] = time.time()
+                # Сохраняем state сразу после каждого файла
+                save_processed_keys(config['state_file'], processed_keys)
             except Exception as e:
                 logger.error(f"Error processing {filename} (UID {uid}): {e}")
                 import traceback
                 traceback.print_exc()
     
-    if not all_late_records and not config['send_if_empty']:
+    if not all_late_records and not config['send_if_empty'] and not (config.get('run_docs_report') and docs_attachments):
         logger.info("No late records found in all attachments")
+        # Сохраняем state даже если нет записей
+        save_processed_keys(config['state_file'], processed_keys)
         return
     
     # Обработка late-report только если есть записи или включена отправка пустых отчётов
@@ -1713,12 +1819,22 @@ def main():
                                           for r in unique_records[len(caption.split('\n')):]])
                     send_telegram_text(config, remaining)
                 
-                # Сохраняем обработанные ключи
-                save_processed_keys(config['state_file'], processed_keys)
+                # Сохраняем данные в базу через API
+                # Используем текущую дату в московском времени
+                report_tz = config.get('report_tz', 'Europe/Moscow')
+                try:
+                    tz = ZoneInfo(report_tz)
+                except:
+                    tz = ZoneInfo('UTC')
+                delay_date = datetime.now(tz).date()
+                delay_datetime = datetime.combine(delay_date, datetime.min.time()).replace(tzinfo=tz)
+                save_late_delays_to_api(config, unique_records, delay_datetime)
                 
                 logger.info(f"Successfully processed late-report with {len(unique_records)} unique late records")
             else:
                 logger.error("Failed to send late-report to Telegram")
+                # Ключи уже сохранены выше после обработки файлов, но сохраняем еще раз для надежности
+                save_processed_keys(config['state_file'], processed_keys)
         
         # Очистка временного файла
         if os.path.exists(temp_png):
