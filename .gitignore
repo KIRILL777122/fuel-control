@@ -15,3 +15,7 @@ coverage/
 # runtime data (uploads, cheques, db)
 data/
 db_data/
+
+# late-report runtime state
+tools/late-report/state/finance/
+tools/late-report/state/shift_processed.json
