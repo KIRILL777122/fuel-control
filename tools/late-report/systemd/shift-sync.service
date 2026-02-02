@@ -1,5 +1,5 @@
 [Unit]
-Description=Late Report Service - Process delays from email and send to Telegram
+Description=Shift Sync Service - Sync shifts from email to API
 After=network.target
 
 [Service]
@@ -10,10 +10,10 @@ EnvironmentFile=/etc/late-report/late-report.env
 Environment="TZ=Europe/Moscow"
 Environment="REPORT_TZ=Europe/Moscow"
 WorkingDirectory=/opt/fuel-control/tools/late-report
-ExecStart=/usr/bin/python3 /opt/fuel-control/tools/late-report/src/late_report.py
+ExecStart=/usr/bin/python3 /opt/fuel-control/tools/late-report/src/shift_sync.py
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=late-report
+SyslogIdentifier=shift-sync
 
 # Security settings
 PrivateTmp=yes

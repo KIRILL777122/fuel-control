@@ -1,0 +1,12 @@
+[Unit]
+Description=Shift Sync Timer - Run daily at 11:10 MSK
+Requires=shift-sync.service
+
+[Timer]
+OnCalendar=11:10 Europe/Moscow
+# Каждый день в 11:10 по московскому времени
+AccuracySec=5min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

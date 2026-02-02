@@ -11,25 +11,17 @@ export default function ReceiptsTabs({ receipts, drivers, vehicles }: { receipts
 
   return (
     <div>
-      <h1 style={{ margin: "0 0 24px 0" }}>Чеки</h1>
-      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+      <h1 className={styles.pageTitle}>Чеки</h1>
+      <div className={styles.tabBar}>
         <button
-          className={styles.button}
+          className={`${styles.tabButton} ${activeTab === "summary" ? styles.tabButtonActive : ""}`}
           onClick={() => setActiveTab("summary")}
-          style={{
-            backgroundColor: activeTab === "summary" ? "#eef2ff" : "#fff",
-            borderColor: activeTab === "summary" ? "#4338ca" : "#d7d7e0",
-          }}
         >
           Сводка
         </button>
         <button
-          className={styles.button}
+          className={`${styles.tabButton} ${activeTab === "receipts" ? styles.tabButtonActive : ""}`}
           onClick={() => setActiveTab("receipts")}
-          style={{
-            backgroundColor: activeTab === "receipts" ? "#eef2ff" : "#fff",
-            borderColor: activeTab === "receipts" ? "#4338ca" : "#d7d7e0",
-          }}
         >
           Чеки
         </button>

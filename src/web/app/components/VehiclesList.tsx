@@ -54,6 +54,21 @@ export function VehiclesList({
     }
   };
 
+  const toggleTelegram = async (v: Vehicle) => {
+    setLoadingId(v.id);
+    try {
+      await fetch(`${API_BASE}/api/vehicles`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ ...v, isTelegramEnabled: !v.isTelegramEnabled }),
+      });
+      onUpdate?.();
+    } finally {
+      setLoadingId(null);
+    }
+  };
+
   const deleteVehicle = async (id: string) => {
     if (!confirm("Удалить автомобиль?")) return;
     setLoadingId(id);
@@ -86,8 +101,8 @@ export function VehiclesList({
           style={{
             padding: 16,
             borderRadius: 12,
-            border: "1px solid #e2e8f0",
-            background: "#fff",
+            border: "1px solid var(--card-border)",
+            background: "var(--card-bg)",
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
@@ -95,9 +110,6 @@ export function VehiclesList({
         >
           <div>
             <div style={{ fontWeight: 700, fontSize: 16 }}>
-              <span onClick={() => togglePin(v)} style={{ cursor: "pointer", marginRight: 8 }}>
-                {v.isPinned ? "⭐" : "☆"}
-              </span>
               {v.plateNumber}
             </div>
             <div style={{ fontSize: 12, opacity: 0.6 }}>{v.name} {v.makeModel && `(${v.makeModel})`}</div>
@@ -106,7 +118,7 @@ export function VehiclesList({
           <div style={{ display: "flex", gap: 8 }}>
             <select
               onChange={(e) => e.target.value && addToList(v.id, e.target.value)}
-              style={{ padding: "4px 8px", borderRadius: 8, border: "1px solid #d7d7e0", fontSize: 12 }}
+              className={styles.select}
             >
               <option value="">+ В список</option>
               {allLists.map((l) => (
@@ -115,10 +127,18 @@ export function VehiclesList({
                 </option>
               ))}
             </select>
+            <button
+              onClick={() => toggleTelegram(v)}
+              className={styles.button}
+              style={{ fontSize: 12, background: v.isTelegramEnabled ? "var(--accent-light-bg)" : undefined, color: v.isTelegramEnabled ? "var(--sidebar-item-active-text)" : undefined }}
+              title={v.isTelegramEnabled ? "Убрать из Telegram" : "Добавить для Telegram"}
+            >
+              📲 Telegram
+            </button>
             <button onClick={() => startEdit(v)} className={styles.button} style={{ fontSize: 12 }}>
               ✏️
             </button>
-            <button onClick={() => deleteVehicle(v.id)} className={styles.button} style={{ fontSize: 12, color: "#ef4444" }}>
+            <button onClick={() => deleteVehicle(v.id)} className={styles.button} style={{ fontSize: 12, color: "var(--danger-text)" }}>
               🗑️
             </button>
           </div>
@@ -126,31 +146,18 @@ export function VehiclesList({
       ))}
 
       {editVehicle && (
-        <div
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: "rgba(0,0,0,0.5)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 1000,
-          }}
-        >
-          <div style={{ background: "#fff", padding: 24, borderRadius: 16, width: "100%", maxWidth: 400 }}>
+        <div className={styles.detailOverlay}>
+          <div className={styles.detailCard} style={{ maxWidth: 400 }}>
             <h3 style={{ marginTop: 0 }}>Редактировать авто</h3>
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              <label style={{ fontSize: 12 }}>Госномер</label>
-              <input value={editVehicle.plateNumber || ""} onChange={(e) => setEditVehicle({ ...editVehicle, plateNumber: e.target.value })} placeholder="Госномер" style={{ padding: 10, borderRadius: 8, border: "1px solid #d7d7e0" }} />
-              <label style={{ fontSize: 12 }}>Краткое имя</label>
-              <input value={editVehicle.name || ""} onChange={(e) => setEditVehicle({ ...editVehicle, name: e.target.value })} placeholder="Краткое имя" style={{ padding: 10, borderRadius: 8, border: "1px solid #d7d7e0" }} />
-              <label style={{ fontSize: 12 }}>Марка/Модель</label>
-              <input value={editVehicle.makeModel || ""} onChange={(e) => setEditVehicle({ ...editVehicle, makeModel: e.target.value })} placeholder="Марка/Модель" style={{ padding: 10, borderRadius: 8, border: "1px solid #d7d7e0" }} />
+              <label className={styles.field}>Госномер</label>
+              <input value={editVehicle.plateNumber || ""} onChange={(e) => setEditVehicle({ ...editVehicle, plateNumber: e.target.value })} placeholder="Госномер" className={styles.input} />
+              <label className={styles.field}>Краткое имя</label>
+              <input value={editVehicle.name || ""} onChange={(e) => setEditVehicle({ ...editVehicle, name: e.target.value })} placeholder="Краткое имя" className={styles.input} />
+              <label className={styles.field}>Марка/Модель</label>
+              <input value={editVehicle.makeModel || ""} onChange={(e) => setEditVehicle({ ...editVehicle, makeModel: e.target.value })} placeholder="Марка/Модель" className={styles.input} />
               <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-                <button onClick={saveEdit} className={styles.button} style={{ flex: 1, background: "#4338ca", color: "#fff" }}>
+                <button onClick={saveEdit} className={styles.button} style={{ flex: 1, background: "var(--primary-bg)", color: "var(--primary-text)" }}>
                   Сохранить
                 </button>
                 <button onClick={() => setEditVehicle(null)} className={styles.button} style={{ flex: 1 }}>

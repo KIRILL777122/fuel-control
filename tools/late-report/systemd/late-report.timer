@@ -1,10 +1,10 @@
 [Unit]
-Description=Late Report Timer - Run daily at 01:00 MSK
+Description=Late Report Timer - Run daily at 11:00 MSK
 Requires=late-report.service
 
 [Timer]
-OnCalendar=01:00 Europe/Moscow
-# Каждый день в 01:00 по московскому времени
+OnCalendar=11:00 Europe/Moscow
+# Каждый день в 11:00 по московскому времени
 AccuracySec=5min
 Persistent=true
 

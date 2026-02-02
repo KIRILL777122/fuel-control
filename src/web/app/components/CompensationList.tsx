@@ -217,7 +217,7 @@ export function CompensationList({ items }: { items: Receipt[] }) {
   };
 
   return (
-    <section style={{ marginTop: 16, padding: 12, background: "#f6f6f6", borderRadius: 8 }}>
+    <section className={styles.card} style={{ marginTop: 16 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
         <h3 style={{ margin: "4px 0 8px" }}>Требуют компенсации</h3>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -233,23 +233,25 @@ export function CompensationList({ items }: { items: Receipt[] }) {
         <input type="checkbox" checked={includePaid} onChange={(e) => setIncludePaid(e.target.checked)} />
         Показывать все оплаченные водителем (не только без компенсации)
       </label>
-      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(160px, 1fr))", gap: 8, marginBottom: 8, fontSize: 14 }}>
-        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          Дата с
-          <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-        </label>
-        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          Дата по
-          <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
-        </label>
-        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          Водитель
-          <input value={driverSearch} onChange={(e) => setDriverSearch(e.target.value)} placeholder="ФИО/ID" />
-        </label>
-        <label style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          Авто
-          <input value={vehicleSearch} onChange={(e) => setVehicleSearch(e.target.value)} placeholder="Госномер/название" />
-        </label>
+      <div className={styles.filterCard} style={{ marginBottom: 8 }}>
+        <div className={styles.filterRow}>
+          <label className={styles.field}>
+            Дата с
+            <input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} className={styles.input} />
+          </label>
+          <label className={styles.field}>
+            Дата по
+            <input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} className={styles.input} />
+          </label>
+          <label className={styles.field}>
+            Водитель
+            <input value={driverSearch} onChange={(e) => setDriverSearch(e.target.value)} placeholder="ФИО/ID" className={styles.input} />
+          </label>
+          <label className={styles.field}>
+            Авто
+            <input value={vehicleSearch} onChange={(e) => setVehicleSearch(e.target.value)} placeholder="Госномер/название" className={styles.input} />
+          </label>
+        </div>
       </div>
       <div style={{ marginBottom: 8, display: "flex", gap: 12, fontSize: 14 }}>
         <div>Ожидает компенсации: {totalPending.length} шт · {sumPending.toFixed(2)}</div>

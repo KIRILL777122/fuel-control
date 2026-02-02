@@ -3,11 +3,8 @@ services:
     image: postgres:16
     restart: unless-stopped
     env_file:
-      - .env.production
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-      POSTGRES_DB: ${POSTGRES_DB}
+      - /opt/fuel-control/.env
+      - _backup_env_2026-01-17_054429.env.production
     volumes:
       - db_data:/var/lib/postgresql/data
     networks:
@@ -17,9 +14,9 @@ services:
     build:
       context: ./src/backend
     env_file:
-      - .env.production
+      - /opt/fuel-control/.env
+      - _backup_env_2026-01-17_054429.env.production
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
       BACKEND_PORT: 3000
     depends_on:
       - db
@@ -34,7 +31,8 @@ services:
     build:
       context: ./src/web
     env_file:
-      - .env.production
+      - /opt/fuel-control/.env
+      - _backup_env_2026-01-17_054429.env.production
     environment:
       API_BASE_URL: http://backend:3000
       PORT: 3001

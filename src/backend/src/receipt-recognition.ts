@@ -211,7 +211,7 @@ function delay(ms: number): Promise<void> {
  * env:
  *  - RECEIPTS_API_KEY (required)
  *  - RECEIPTS_API_URL (optional, defaults to proverkacheka endpoint)
- * 
+ *
  * Uses POST with form-urlencoded body containing:
  *  - token: RECEIPTS_API_KEY
  *  - qrraw: raw QR string
@@ -221,15 +221,14 @@ export async function recognizeByQr(qrRaw: string): Promise<ProviderResult> {
   if (!token) {
     return { ok: false, note: "RECEIPTS_API_KEY not set" };
   }
-  
+
   const baseUrl = process.env.RECEIPTS_API_URL || "https://proverkacheka.com/api/v1/check/get";
   const requestId = `req_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
-  
-  // Safe logging data (no secrets)
+
   const tokenLen = token.length;
   const tokenLast4 = token.length >= 4 ? token.slice(-4) : "N/A";
   const qrRawPreview = qrRaw.length > 20 ? qrRaw.substring(0, 20) + "..." : qrRaw;
-  
+
   safeLog("INFO", requestId, {
     type: "qrraw",
     tokenLen,
@@ -237,16 +236,14 @@ export async function recognizeByQr(qrRaw: string): Promise<ProviderResult> {
     qrRawPreview,
     url: baseUrl,
   });
-  
-  // Prepare form data
+
   const formData = new URLSearchParams();
   formData.append("token", token);
   formData.append("qrraw", qrRaw);
-  
-  // Retry logic for code=2 and code=4
-  const delays = [2000, 5000, 10000]; // 2s, 5s, 10s
+
+  const delays = [2000, 5000, 10000];
   const maxRetries = delays.length;
-  
+
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       const res = await fetch(baseUrl, {
@@ -257,7 +254,7 @@ export async function recognizeByQr(qrRaw: string): Promise<ProviderResult> {
         },
         body: formData.toString(),
       });
-      
+
       const text = await res.text().catch(() => "");
       let json: any = {};
       try {
@@ -265,11 +262,10 @@ export async function recognizeByQr(qrRaw: string): Promise<ProviderResult> {
       } catch {
         json = { message: text };
       }
-      
+
       const code = json?.code;
       const message = json?.data || json?.error || json?.message || text || "";
-      
-      // Log response
+
       safeLog(attempt > 0 ? "RETRY" : "INFO", requestId, {
         type: "qrraw",
         tokenLen,
@@ -279,11 +275,10 @@ export async function recognizeByQr(qrRaw: string): Promise<ProviderResult> {
         message: typeof message === "string" ? message.substring(0, 100) : String(message),
         attempt: attempt + 1,
       });
-      
-      // Handle HTTP errors
+
       if (!res.ok && res.status !== 200) {
         const errorMsg = `provider http ${res.status}: ${message}`;
-        if (res.status === 401 || res.status === 403 || code === 401 || code === 403 || 
+        if (res.status === 401 || res.status === 403 || code === 401 || code === 403 ||
             (typeof message === "string" && message.toLowerCase().includes("не авторизован"))) {
           safeLog("ERROR", requestId, {
             type: "qrraw",
@@ -293,18 +288,12 @@ export async function recognizeByQr(qrRaw: string): Promise<ProviderResult> {
             code: code || res.status,
             message: "Неверный или не передан токен proverkacheka",
           });
-          return { 
-            ok: false, 
-            note: "Неверный или не передан токен proverkacheka", 
-            raw: { code, message }
-          };
+          return { ok: false, note: "Неверный или не передан токен proverkacheka", raw: { code, message } };
         }
         return { ok: false, note: errorMsg, raw: json };
       }
-      
-      // Handle code-based responses
+
       if (code === 1) {
-        // Success
         safeLog("SUCCESS", requestId, {
           type: "qrraw",
           tokenLen,
@@ -314,9 +303,8 @@ export async function recognizeByQr(qrRaw: string): Promise<ProviderResult> {
         });
         return extractReceipt(json);
       }
-      
+
       if (code === 2 || code === 4) {
-        // Waiting/pending - retry with delay
         if (attempt < maxRetries) {
           const delayMs = delays[attempt];
           safeLog("RETRY", requestId, {
@@ -329,34 +317,16 @@ export async function recognizeByQr(qrRaw: string): Promise<ProviderResult> {
             attempt: attempt + 1,
           });
           await delay(delayMs);
-          continue; // Retry
-        } else {
-          // Max retries reached
-          return { 
-            ok: false, 
-            note: `provider timeout: check still pending after ${maxRetries} retries`, 
-            raw: json 
-          };
+          continue;
         }
+        return { ok: false, note: `provider timeout: check still pending after ${maxRetries} retries`, raw: json };
       }
-      
-      if (code === 401 || code === 403) {
-        safeLog("ERROR", requestId, {
-          type: "qrraw",
-          tokenLen,
-          tokenLast4,
-          qrRawPreview,
-          code,
-          message: "Неверный или не передан токен proverkacheka",
-        });
-        return { 
-          ok: false, 
-          note: "Неверный или не передан токен proverkacheka", 
-          raw: json 
-        };
+
+      if (code === 401 || code === 403 ||
+          (typeof message === "string" && message.toLowerCase().includes("не авторизован"))) {
+        return { ok: false, note: "Неверный или не передан токен proverkacheka", raw: json };
       }
-      
-      // Other error codes
+
       const errorMsg = `provider error code=${code}: ${message}`;
       safeLog("ERROR", requestId, {
         type: "qrraw",
@@ -367,7 +337,6 @@ export async function recognizeByQr(qrRaw: string): Promise<ProviderResult> {
         message: typeof message === "string" ? message.substring(0, 100) : String(message),
       });
       return { ok: false, note: errorMsg, raw: json };
-      
     } catch (err: any) {
       const errorMsg = (err as Error).message || String(err);
       safeLog("ERROR", requestId, {
@@ -378,17 +347,140 @@ export async function recognizeByQr(qrRaw: string): Promise<ProviderResult> {
         code: "EXCEPTION",
         message: errorMsg.substring(0, 100),
       });
-      
-      // If this is not a retryable error, return immediately
+
       if (attempt === maxRetries) {
         return { ok: false, note: `provider error: ${errorMsg}` };
       }
-      
-      // For network errors, retry with delay
       await delay(delays[attempt] || 2000);
     }
   }
-  
-  // Should not reach here, but just in case
+
   return { ok: false, note: "provider error: max retries exceeded" };
+}
+
+/**
+ * Fetches receipt data from proverkacheka.com by qrfile (image).
+ */
+export async function recognizeByFile(imagePath: string): Promise<ProviderResult> {
+  const token = process.env.RECEIPTS_API_KEY;
+  if (!token) {
+    return { ok: false, note: "RECEIPTS_API_KEY not set" };
+  }
+
+  const baseUrl = process.env.RECEIPTS_API_URL || "https://proverkacheka.com/api/v1/check/get";
+  const requestId = `req_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`;
+
+  let fileBuffer: Buffer;
+  try {
+    fileBuffer = await fs.promises.readFile(imagePath);
+  } catch {
+    return { ok: false, note: "failed to read image file" };
+  }
+
+  safeLog("INFO", requestId, {
+    type: "qrfile",
+    tokenLen: token.length,
+    tokenLast4: token.length >= 4 ? token.slice(-4) : "N/A",
+    qrRawPreview: path.basename(imagePath),
+    url: baseUrl,
+  });
+
+  const formData = new FormData();
+  formData.append("token", token);
+  formData.append("qrfile", new Blob([new Uint8Array(fileBuffer)]), path.basename(imagePath));
+
+  const delays = [2000, 5000, 10000];
+  const maxRetries = delays.length;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      const res = await fetch(baseUrl, {
+        method: "POST",
+        body: formData,
+        headers: { "Accept": "application/json" },
+      });
+
+      const text = await res.text().catch(() => "");
+      let json: any = {};
+      try {
+        json = JSON.parse(text);
+      } catch {
+        json = { message: text };
+      }
+
+      const code = json?.code;
+      const message = json?.data || json?.error || json?.message || text || "";
+
+      safeLog(attempt > 0 ? "RETRY" : "INFO", requestId, {
+        type: "qrfile",
+        tokenLen: token.length,
+        tokenLast4: token.length >= 4 ? token.slice(-4) : "N/A",
+        qrRawPreview: path.basename(imagePath),
+        code,
+        message: typeof message === "string" ? message.substring(0, 100) : String(message),
+        attempt: attempt + 1,
+      });
+
+      if (!res.ok && res.status !== 200) {
+        const errorMsg = `provider http ${res.status}: ${message}`;
+        if (res.status === 401 || res.status === 403 || code === 401 || code === 403 ||
+            (typeof message === "string" && message.toLowerCase().includes("не авторизован"))) {
+          safeLog("ERROR", requestId, {
+            type: "qrfile",
+            tokenLen: token.length,
+            tokenLast4: token.length >= 4 ? token.slice(-4) : "N/A",
+            qrRawPreview: path.basename(imagePath),
+            code: code || res.status,
+            message: "Неверный или не передан токен proverkacheka",
+          });
+          return { ok: false, note: "Неверный или не передан токен proverkacheka", raw: { code, message } };
+        }
+        return { ok: false, note: errorMsg, raw: json };
+      }
+
+      if (code === 1) {
+        safeLog("SUCCESS", requestId, {
+          type: "qrfile",
+          tokenLen: token.length,
+          tokenLast4: token.length >= 4 ? token.slice(-4) : "N/A",
+          qrRawPreview: path.basename(imagePath),
+          code: 1,
+        });
+        return extractReceipt(json);
+      }
+
+      if (code === 2 || code === 4) {
+        if (attempt < maxRetries) {
+          const delayMs = delays[attempt];
+          safeLog("RETRY", requestId, {
+            type: "qrfile",
+            tokenLen: token.length,
+            tokenLast4: token.length >= 4 ? token.slice(-4) : "N/A",
+            qrRawPreview: path.basename(imagePath),
+            code,
+            message: `Retrying after ${delayMs}ms`,
+            attempt: attempt + 1,
+          });
+          await delay(delayMs);
+          continue;
+        }
+        return { ok: false, note: `provider timeout: check still pending after ${maxRetries} retries`, raw: json };
+      }
+
+      if (code === 401 || code === 403 ||
+          (typeof message === "string" && message.toLowerCase().includes("не авторизован"))) {
+        return { ok: false, note: "Неверный или не передан токен proverkacheka", raw: json };
+      }
+
+      return { ok: false, note: "provider failed", raw: json };
+    } catch (e: any) {
+      if (attempt < maxRetries) {
+        await delay(delays[attempt]);
+        continue;
+      }
+      return { ok: false, note: e?.message ?? "provider error" };
+    }
+  }
+
+  return { ok: false, note: "provider failed" };
 }

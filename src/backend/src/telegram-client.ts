@@ -33,10 +33,11 @@ async function tgFetch<T>(url: string, options?: RequestInit): Promise<T> {
 
 export async function sendMessage(chatId: number | string, text: string, replyMarkup?: any): Promise<TgResponse | undefined> {
   if (!token) return;
+  const normalizedReply = replyMarkup?.reply_markup ? replyMarkup.reply_markup : replyMarkup;
   return tgFetch<TgResponse>(`${apiBase}/sendMessage`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ chat_id: chatId, text, reply_markup: replyMarkup }),
+    body: JSON.stringify({ chat_id: chatId, text, reply_markup: normalizedReply }),
   });
 }
 

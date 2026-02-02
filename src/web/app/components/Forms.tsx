@@ -3,6 +3,7 @@
 import React from "react";
 import styles from "../page.module.css";
 
+// Use relative URLs so requests go via the same origin (Caddy) and cookies work.
 const API_BASE = "";
 
 export function DriverForm({ onSave }: { onSave?: () => void }) {
@@ -40,31 +41,29 @@ export function DriverForm({ onSave }: { onSave?: () => void }) {
   };
 
   return (
-    <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        <label style={{ fontSize: 13, display: "flex", flexDirection: "column", gap: 4 }}>
-          Telegram ID
-          <input
-            required
-            value={telegramUserId}
-            onChange={(e) => setTg(e.target.value)}
-            style={{ width: "100%", padding: 10, borderRadius: 8, border: "1px solid #d7d7e0" }}
-          />
-        </label>
-        <label style={{ fontSize: 13, display: "flex", flexDirection: "column", gap: 4 }}>
-          ФИО
-          <input
-            value={fullName}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Опционально"
-            style={{ width: "100%", padding: 10, borderRadius: 8, border: "1px solid #d7d7e0" }}
-          />
-        </label>
-      </div>
-      <button className={styles.button} type="submit" disabled={loading} style={{ background: "#4338ca", color: "#fff", border: "none" }}>
-        {loading ? "Сохраняю..." : "Добавить водителя"}
+    <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <label className={styles.field}>
+        Telegram ID
+        <input
+          required
+          value={telegramUserId}
+          onChange={(e) => setTg(e.target.value)}
+          className={styles.input}
+        />
+      </label>
+      <label className={styles.field}>
+        ФИО
+        <input
+          value={fullName}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Опционально"
+          className={styles.input}
+        />
+      </label>
+      <button className={styles.button} type="submit" disabled={loading}>
+        {loading ? "Сохраняю..." : "Сохранить"}
       </button>
-      {msg && <div style={{ fontSize: 13, color: msg === "Сохранено" ? "#10b981" : "#ef4444", fontWeight: 600 }}>{msg}</div>}
+      {msg && <div style={{ fontSize: 12, opacity: 0.8 }}>{msg}</div>}
     </form>
   );
 }
@@ -84,7 +83,7 @@ export function VehicleForm({ onSave }: { onSave?: () => void }) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ plateNumber: plateNumber.trim().toUpperCase(), name: name.trim() }),
+        body: JSON.stringify({ plateNumber, name }),
       });
       const data = await res.json();
       if (res.ok) {
@@ -103,31 +102,28 @@ export function VehicleForm({ onSave }: { onSave?: () => void }) {
   };
 
   return (
-    <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-        <label style={{ fontSize: 13, display: "flex", flexDirection: "column", gap: 4 }}>
-          Госномер
-          <input
-            required
-            value={plateNumber}
-            onChange={(e) => setPlate(e.target.value)}
-            style={{ width: "100%", padding: 10, borderRadius: 8, border: "1px solid #d7d7e0" }}
-          />
-        </label>
-        <label style={{ fontSize: 13, display: "flex", flexDirection: "column", gap: 4 }}>
-          Название (кратко)
-          <input
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            placeholder="Опционально"
-            style={{ width: "100%", padding: 10, borderRadius: 8, border: "1px solid #d7d7e0" }}
-          />
-        </label>
-      </div>
-      <button className={styles.button} type="submit" disabled={loading} style={{ background: "#4338ca", color: "#fff", border: "none" }}>
-        {loading ? "Сохраняю..." : "Добавить автомобиль"}
+    <form onSubmit={submit} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+      <label className={styles.field}>
+        Госномер
+        <input
+          value={plateNumber}
+          onChange={(e) => setPlate(e.target.value)}
+          className={styles.input}
+        />
+      </label>
+      <label className={styles.field}>
+        Название
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Опционально"
+          className={styles.input}
+        />
+      </label>
+      <button className={styles.button} type="submit" disabled={loading}>
+        {loading ? "Сохраняю..." : "Сохранить"}
       </button>
-      {msg && <div style={{ fontSize: 13, color: msg === "Сохранено" ? "#10b981" : "#ef4444", fontWeight: 600 }}>{msg}</div>}
+      {msg && <div style={{ fontSize: 12, opacity: 0.8 }}>{msg}</div>}
     </form>
   );
 }

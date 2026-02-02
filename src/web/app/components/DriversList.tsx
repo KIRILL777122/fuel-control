@@ -127,8 +127,8 @@ export function DriversList({
           style={{
             padding: 16,
             borderRadius: 12,
-            border: "1px solid #e2e8f0",
-            background: "#fff",
+            border: "1px solid var(--card-border)",
+            background: "var(--card-bg)",
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
@@ -136,9 +136,6 @@ export function DriversList({
         >
           <div>
             <div style={{ fontWeight: 700, fontSize: 16 }}>
-              <span onClick={() => togglePin(d)} style={{ cursor: "pointer", marginRight: 8 }}>
-                {d.isPinned ? "⭐" : "☆"}
-              </span>
               {d.fullName || d.telegramUserId}
             </div>
             <div style={{ fontSize: 12, opacity: 0.6 }}>ID: {d.telegramUserId}</div>
@@ -148,13 +145,13 @@ export function DriversList({
             <button
               onClick={() => loadDetails(d.id)}
               className={styles.button}
-              style={{ fontSize: 12, background: "#f0fdf4", color: "#166534", borderColor: "#bbf7d0" }}
+              style={{ fontSize: 12, background: "var(--status-done-bg)", color: "var(--status-done-text)", borderColor: "var(--status-done-bg)" }}
             >
               💳 Реквизиты
             </button>
             <select
               onChange={(e) => e.target.value && addToList(d.id, e.target.value)}
-              style={{ padding: "4px 8px", borderRadius: 8, border: "1px solid #d7d7e0", fontSize: 12 }}
+              className={styles.select}
             >
               <option value="">+ В список</option>
               {allLists.map((l) => (
@@ -166,7 +163,7 @@ export function DriversList({
             <button onClick={() => startEdit(d)} className={styles.button} style={{ fontSize: 12 }}>
               ✏️
             </button>
-            <button onClick={() => deleteDriver(d.id)} className={styles.button} style={{ fontSize: 12, color: "#ef4444" }}>
+            <button onClick={() => deleteDriver(d.id)} className={styles.button} style={{ fontSize: 12, color: "var(--danger-text)" }}>
               🗑️
             </button>
           </div>
@@ -174,39 +171,26 @@ export function DriversList({
       ))}
 
       {editDriver && (
-        <div
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: "rgba(0,0,0,0.5)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 1000,
-          }}
-        >
-          <div style={{ background: "#fff", padding: 24, borderRadius: 16, width: "100%", maxWidth: 400 }}>
+        <div className={styles.detailOverlay}>
+          <div className={styles.detailCard} style={{ maxWidth: 400 }}>
             <h3 style={{ marginTop: 0 }}>Редактировать водителя</h3>
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              <label style={{ fontSize: 12 }}>ФИО</label>
+              <label className={styles.field}>ФИО</label>
               <input
                 value={editDriver.fullName || ""}
                 onChange={(e) => setEditId({ ...editDriver, fullName: e.target.value })}
                 placeholder="ФИО"
-                style={{ padding: 10, borderRadius: 8, border: "1px solid #d7d7e0" }}
+                className={styles.input}
               />
-              <label style={{ fontSize: 12 }}>Telegram ID</label>
+              <label className={styles.field}>Telegram ID</label>
               <input
                 value={editDriver.telegramUserId}
                 onChange={(e) => setEditId({ ...editDriver, telegramUserId: e.target.value })}
                 placeholder="Telegram ID"
-                style={{ padding: 10, borderRadius: 8, border: "1px solid #d7d7e0" }}
+                className={styles.input}
               />
               <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
-                <button onClick={saveEdit} className={styles.button} style={{ flex: 1, background: "#4338ca", color: "#fff" }}>
+                <button onClick={saveEdit} className={styles.button} style={{ flex: 1, background: "var(--primary-bg)", color: "var(--primary-text)" }}>
                   Сохранить
                 </button>
                 <button onClick={() => setEditId(null)} className={styles.button} style={{ flex: 1 }}>
@@ -219,21 +203,8 @@ export function DriversList({
       )}
 
       {showDetails && (
-        <div
-          style={{
-            position: "fixed",
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            background: "rgba(0,0,0,0.5)",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "center",
-            zIndex: 1000,
-          }}
-        >
-          <div style={{ background: "#fff", padding: 24, borderRadius: 20, width: "100%", maxWidth: 500, maxHeight: "90vh", overflowY: "auto" }}>
+        <div className={styles.detailOverlay}>
+          <div className={styles.detailCard} style={{ maxWidth: 500, maxHeight: "90vh", overflowY: "auto" }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
               <h3 style={{ margin: 0 }}>Реквизиты для выплат</h3>
               <button onClick={() => setShowDetails(null)} style={{ background: "none", border: "none", fontSize: 24, cursor: "pointer" }}>
@@ -248,13 +219,13 @@ export function DriversList({
                 details.map((det) => (
                   <div
                     key={det.id}
-                    style={{ padding: 16, border: "1px solid #e2e8f0", borderRadius: 16, background: "#f8fafc", display: "flex", justifyContent: "space-between", alignItems: "center" }}
+                    style={{ padding: 16, border: "1px solid var(--card-border)", borderRadius: 16, background: "var(--background)", display: "flex", justifyContent: "space-between", alignItems: "center" }}
                   >
                     <div>
-                      <div style={{ fontWeight: 700, color: "#1e293b" }}>{det.type} {det.bankName && `(${det.bankName})`}</div>
+                      <div style={{ fontWeight: 700, color: "var(--text)" }}>{det.type} {det.bankName && `(${det.bankName})`}</div>
                       <div style={{ fontSize: 14, fontFamily: "monospace" }}>{det.account}</div>
                     </div>
-                    <button onClick={() => deleteDetail(det.id)} style={{ color: "#ef4444", background: "none", border: "none", cursor: "pointer" }}>
+                    <button onClick={() => deleteDetail(det.id)} style={{ color: "var(--danger-text)", background: "none", border: "none", cursor: "pointer" }}>
                       Удалить
                     </button>
                   </div>
@@ -262,25 +233,21 @@ export function DriversList({
               )}
             </div>
 
-            <div style={{ background: "#f1f5f9", padding: 20, borderRadius: 16 }}>
-              <h4 style={{ marginTop: 0, marginBottom: 12 }}>Добавить новые</h4>
-              <div style={{ display: "grid", gap: 10 }}>
-                <select value={newDetType} onChange={(e) => setNewDetType(e.target.value)} style={{ padding: 10, borderRadius: 8, border: "1px solid #d7d7e0" }}>
-                  <option value="SBP">СБП (Телефон)</option>
+            <div style={{ borderTop: "1px solid var(--card-border)", paddingTop: 20 }}>
+              <h4 style={{ margin: "0 0 12px" }}>Добавить реквизиты</h4>
+              <div style={{ display: "grid", gap: 12 }}>
+                <select value={newDetType} onChange={(e) => setNewDetType(e.target.value)} className={styles.select}>
+                  <option value="SBP">СБП</option>
                   <option value="CARD">Карта</option>
-                  <option value="BANK">Счет</option>
+                  <option value="CASH">Наличные</option>
                 </select>
-                <input value={newDetBank} onChange={(e) => setNewDetBank(e.target.value)} placeholder="Банк (напр. Тинькофф)" style={{ padding: 10, borderRadius: 8, border: "1px solid #d7d7e0" }} />
-                <input value={newDetAcc} onChange={(e) => setNewDetAcc(e.target.value)} placeholder="Номер / Счет" style={{ padding: 10, borderRadius: 8, border: "1px solid #d7d7e0" }} />
-                <button onClick={saveDetail} className={styles.button} style={{ background: "#16a34a", color: "#fff", border: "none", marginTop: 8 }}>
-                  Добавить реквизиты
+                <input value={newDetBank} onChange={(e) => setNewDetBank(e.target.value)} placeholder="Банк (опционально)" className={styles.input} />
+                <input value={newDetAcc} onChange={(e) => setNewDetAcc(e.target.value)} placeholder="Номер счета/телефон" className={styles.input} />
+                <button onClick={saveDetail} className={styles.button} style={{ background: "var(--primary-bg)", color: "var(--primary-text)" }}>
+                  Добавить
                 </button>
               </div>
             </div>
-
-            <button onClick={() => setShowDetails(null)} className={styles.button} style={{ width: "100%", marginTop: 20 }}>
-              Закрыть
-            </button>
           </div>
         </div>
       )}

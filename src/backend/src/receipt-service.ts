@@ -89,16 +89,22 @@ export async function createReceiptFromDto(prisma: PrismaClient, dto: CreateRece
   const receiptPayload = dto.receipt;
   const itemsPayload = dto.items ?? [];
 
+  // При upsert обновляем fullName только если он передан явно и не пустой
+  // Это предотвращает перезапись имени водителя при создании чека
+  const updateData: any = {
+    isActive: true,
+    lastSeenAt: new Date(),
+  };
+  // Не обновляем имя автоматически, чтобы не затирать ручные правки на сайте.
+
   const driver = await prisma.driver.upsert({
     where: { telegramUserId: driverPayload.telegramUserId },
-    update: {
-      fullName: driverPayload.fullName ?? undefined,
-      isActive: true,
-      lastSeenAt: new Date(),
-    },
+    update: updateData,
     create: {
       telegramUserId: driverPayload.telegramUserId,
-      fullName: driverPayload.fullName ?? driverPayload.telegramUserId,
+      fullName: driverPayload.fullName && driverPayload.fullName.trim().length > 0 
+        ? driverPayload.fullName.trim() 
+        : driverPayload.telegramUserId,
       isActive: true,
       lastSeenAt: new Date(),
     },
@@ -121,15 +127,15 @@ export async function createReceiptFromDto(prisma: PrismaClient, dto: CreateRece
     ? await prisma.vehicle.update({
         where: { id: foundVehicle.id },
         data: {
-          plateNumber: plate ?? foundVehicle.plateNumber ?? "Unknown",
-          name: vname ?? foundVehicle.name ?? "Unknown",
+          plateNumber: plate ?? foundVehicle.plateNumber,
+          name: vname ?? foundVehicle.name,
           isActive: true,
         },
       })
     : await prisma.vehicle.create({
         data: {
           name: vname ?? plate ?? "Unknown vehicle",
-          plateNumber: plate ?? "UNKNOWN",
+          plateNumber: plate,
           isActive: true,
         },
       });
@@ -189,7 +195,7 @@ export async function createReceiptFromDto(prisma: PrismaClient, dto: CreateRece
     await prisma.receiptItem.createMany({
       data: itemsPayload.map((it) => ({
         receiptId: receipt.id,
-        name: it.name ?? "Unknown item",
+        name: it.name,
         quantity: toDecimal(it.quantity),
         unitPrice: toDecimal(it.unitPrice),
         amount: toDecimal(it.amount),

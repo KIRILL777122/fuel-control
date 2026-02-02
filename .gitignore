@@ -1,4 +1,4 @@
-﻿# secrets
+# secrets
 .env
 .env.*
 !.env.example
@@ -15,6 +15,10 @@ coverage/
 # runtime data (uploads, cheques, db)
 data/
 db_data/
+
+# server backups
+/_backup_*/
+/_backup_data_pg_*/
 
 # late-report runtime state
 tools/late-report/state/finance/

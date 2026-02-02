@@ -2,6 +2,7 @@
 
 import React from "react";
 import styles from "../page.module.css";
+
 import { LateDelay, Driver, CustomList } from "../types";
 
 const API_BASE = "";
@@ -13,7 +14,9 @@ function getDelayEmoji(minutes: number) {
 }
 
 function formatDate(dateStr: string) {
-  return new Date(dateStr).toLocaleDateString('ru-RU');
+  const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return dateStr;
+  return d.toLocaleDateString("ru-RU");
 }
 
 async function getJson(url: string) {
@@ -27,31 +30,27 @@ export default function LatePage() {
   const [delays, setDelays] = React.useState<LateDelay[]>([]);
   const [loading, setLoading] = React.useState(true);
   
-  // Filters
   const [dateFrom, setDateFrom] = React.useState<string>(() => {
     const d = new Date();
     d.setDate(d.getDate() - 30);
-    return d.toISOString().split('T')[0];
+    return d.toISOString().split("T")[0];
   });
-  const [dateTo, setDateTo] = React.useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [dateTo, setDateTo] = React.useState<string>(() => new Date().toISOString().split("T")[0]);
   const [selectedDrivers, setSelectedDrivers] = React.useState<string[]>([]);
   const [selectedListId, setSelectedListId] = React.useState<string>("");
-  
-  // Metadata
-  const [allDrivers, setAllDrivers] = React.useState<Driver[]>([]);
-  const [driverLists, setDriverLists] = React.useState<CustomList[]>([]);
-  
-  // Selection
-  const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set());
-
-  // Sorting for Rating tab
+  const [driverQuery, setDriverQuery] = React.useState("");
+  const [selectedRoutes, setSelectedRoutes] = React.useState<string[]>([]);
   const [ratingSortBy, setRatingSortBy] = React.useState<"total" | "red" | "yellow" | "green" | "totalMinutes">("total");
   const [ratingSortDir, setRatingSortDir] = React.useState<"desc" | "asc">("desc");
+  
+  const [allDrivers, setAllDrivers] = React.useState<Driver[]>([]);
+  const [driverLists, setDriverLists] = React.useState<CustomList[]>([]);
+  const [selectedIds, setSelectedIds] = React.useState<Set<string>>(new Set());
 
   const loadMetadata = React.useCallback(async () => {
     const [dRes, lRes] = await Promise.all([
       getJson("/api/drivers"),
-      getJson("/api/lists?type=DRIVER")
+      getJson("/api/lists?type=DRIVER"),
     ]);
     if (dRes.ok) setAllDrivers(dRes.data);
     if (lRes.ok) setDriverLists(lRes.data);
@@ -99,27 +98,34 @@ export default function LatePage() {
   const processedDelays = React.useMemo(() => {
     return delays.filter(d => {
       if (selectedDrivers.length > 0 && !selectedDrivers.includes(d.driverName)) return false;
+      if (selectedRoutes.length > 0 && !selectedRoutes.includes(d.routeName)) return false;
       return true;
     });
-  }, [delays, selectedDrivers]);
+  }, [delays, selectedDrivers, selectedRoutes]);
+
+  const routeOptions = React.useMemo(() => {
+    const unique = Array.from(new Set(delays.map((d) => d.routeName).filter(Boolean)));
+    return unique.sort((a, b) => a.localeCompare(b, "ru"));
+  }, [delays]);
 
   const analyticsData = React.useMemo(() => {
-    const stats: Record<string, { driverName: string; red: number; yellow: number; green: number; total: number; totalMinutes: number; details: LateDelay[] }> = {};
-    
+    const stats: Record<string, { driverName: string; red: number; yellow: number; green: number; total: number; totalMinutes: number; details: LateDelay[]; routes: Record<string, number>; vehicles: Record<string, number> }> = {};
     processedDelays.forEach(d => {
       if (!stats[d.driverName]) {
-        stats[d.driverName] = { driverName: d.driverName, red: 0, yellow: 0, green: 0, total: 0, totalMinutes: 0, details: [] };
+        stats[d.driverName] = { driverName: d.driverName, red: 0, yellow: 0, green: 0, total: 0, totalMinutes: 0, details: [], routes: {}, vehicles: {} };
       }
       const s = stats[d.driverName];
       s.total++;
       s.totalMinutes += d.delayMinutes;
       s.details.push(d);
+      s.routes[d.routeName] = (s.routes[d.routeName] || 0) + 1;
+      if (d.plateNumber) {
+        s.vehicles[d.plateNumber] = (s.vehicles[d.plateNumber] || 0) + 1;
+      }
       if (d.delayMinutes >= 21) s.red++;
       else if (d.delayMinutes >= 11) s.yellow++;
       else s.green++;
     });
-    
-    // Apply sorting
     return Object.values(stats).sort((a, b) => {
       let compare = 0;
       if (ratingSortBy === "total") compare = b.total - a.total;
@@ -127,10 +133,17 @@ export default function LatePage() {
       else if (ratingSortBy === "yellow") compare = b.yellow - a.yellow;
       else if (ratingSortBy === "green") compare = b.green - a.green;
       else if (ratingSortBy === "totalMinutes") compare = b.totalMinutes - a.totalMinutes;
-
       return ratingSortDir === "desc" ? compare : -compare;
     });
   }, [processedDelays, ratingSortBy, ratingSortDir]);
+
+  const routeSummary = React.useMemo(() => {
+    const totals: Record<string, number> = {};
+    processedDelays.forEach((d) => {
+      totals[d.routeName] = (totals[d.routeName] || 0) + 1;
+    });
+    return Object.entries(totals).sort((a, b) => b[1] - a[1]);
+  }, [processedDelays]);
 
   const toggleSelect = (id: string) => {
     const next = new Set(selectedIds);
@@ -149,267 +162,353 @@ export default function LatePage() {
         credentials: "include",
         body: JSON.stringify({ ids: Array.from(selectedIds) }),
       });
-      if (res.ok) {
-        setDelays(prev => prev.filter(d => !selectedIds.has(d.id)));
-        setSelectedIds(new Set());
+      if (!res.ok) {
+        const text = await res.text();
+        alert(text || "Не удалось удалить записи");
+        return;
       }
+      setDelays(prev => prev.filter(d => !selectedIds.has(d.id)));
+      setSelectedIds(new Set());
+      await loadDelays();
     } catch (err) {
       alert("Ошибка удаления");
     }
   };
 
-  const handleRatingSort = (column: typeof ratingSortBy) => {
-    if (ratingSortBy === column) {
-      setRatingSortDir(prev => (prev === "desc" ? "asc" : "desc"));
-    } else {
-      setRatingSortBy(column);
-      setRatingSortDir("desc");
-    }
-  };
-
-  const getSortIndicator = (column: typeof ratingSortBy) => {
-    if (ratingSortBy === column) {
-      return ratingSortDir === "desc" ? " ↓" : " ↑";
-    }
-    return "";
-  };
-
   return (
     <div style={{ padding: 16 }}>
-      <h1 style={{ margin: "0 0 24px 0" }}>🕒 Опоздания</h1>
+      <h1 className={styles.pageTitle}>🕒 Опоздания</h1>
 
-      {/* ФИЛЬТРЫ */}
-      <div style={{ background: "#fff", padding: 16, borderRadius: 12, border: "1px solid #e9e9f2", marginBottom: 16 }}>
-        <div style={{ display: "flex", gap: 16, alignItems: "flex-end", flexWrap: "wrap" }}>
-          <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 13 }}>
-            Период от
-            <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} style={{ padding: 8, borderRadius: 8, border: "1px solid #d7d7e0" }} />
-          </label>
-          <label style={{ display: "flex", flexDirection: "column", gap: 4, fontSize: 13 }}>
-            Период до
-            <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} style={{ padding: 8, borderRadius: 8, border: "1px solid #d7d7e0" }} />
-          </label>
-          
-          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <span style={{ fontSize: 13 }}>Список водителей</span>
-            <select 
-              value={selectedListId} 
-              onChange={e => handleListChange(e.target.value)}
-              style={{ padding: 8, borderRadius: 8, border: "1px solid #d7d7e0", minWidth: 180 }}
-            >
-              <option value="">-- Все --</option>
-              {driverLists.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
-            </select>
-          </div>
-
-          <button className={styles.button} onClick={loadDelays} disabled={loading} style={{ height: 38 }}>
-            {loading ? "..." : "Обновить"}
-          </button>
-        </div>
-
-        {selectedListId === "" && (
-          <div style={{ marginTop: 12 }}>
-            <span style={{ fontSize: 12, opacity: 0.7, display: "block", marginBottom: 4 }}>Выберите водителей вручную:</span>
-            <div style={{ display: "flex", gap: 8, flexWrap: "wrap", maxHeight: 80, overflowY: "auto", padding: 8, border: "1px solid #eee", borderRadius: 8 }}>
-              {allDrivers.map(d => {
-                const name = d.fullName || d.telegramUserId;
-                const isSel = selectedDrivers.includes(name);
-                return (
-                  <label key={d.id} style={{ fontSize: 12, display: "flex", alignItems: "center", gap: 4, cursor: "pointer", padding: "2px 6px", background: isSel ? "#eef2ff" : "#f9fafb", borderRadius: 4, border: "1px solid", borderColor: isSel ? "#4338ca" : "#e5e7eb" }}>
-                    <input 
-                      type="checkbox" 
-                      checked={isSel} 
-                      onChange={() => setSelectedDrivers(prev => isSel ? prev.filter(x => x !== name) : [...prev, name])} 
-                    />
-                    {name}
-                  </label>
-                );
-              })}
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* ТАБЫ */}
-      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-        <button 
-          className={styles.button} 
+      <div className={styles.tabBar}>
+        <button
+          className={`${styles.tabButton} ${activeTab === "history" ? styles.tabButtonActive : ""}`}
           onClick={() => setActiveTab("history")}
-          style={{ background: activeTab === "history" ? "#eef2ff" : "#fff", borderColor: activeTab === "history" ? "#4338ca" : "#d7d7e0" }}
         >
           📋 История ({processedDelays.length})
         </button>
-        <button 
-          className={styles.button} 
+        <button
+          className={`${styles.tabButton} ${activeTab === "analytics" ? styles.tabButtonActive : ""}`}
           onClick={() => setActiveTab("analytics")}
-          style={{ background: activeTab === "analytics" ? "#eef2ff" : "#fff", borderColor: activeTab === "analytics" ? "#4338ca" : "#d7d7e0" }}
         >
           📊 Аналитика
         </button>
-        <button 
-          className={styles.button} 
+        <button
+          className={`${styles.tabButton} ${activeTab === "rating" ? styles.tabButtonActive : ""}`}
           onClick={() => setActiveTab("rating")}
-          style={{ background: activeTab === "rating" ? "#fffbeb" : "#fff", borderColor: activeTab === "rating" ? "#d97706" : "#d7d7e0" }}
         >
           🏆 Рейтинг (Топ)
         </button>
       </div>
 
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 300px", gap: 16, marginBottom: 16 }}>
+        <div className={styles.filterCard} style={{ marginBottom: 0 }}>
+          <div className={styles.filterRow} style={{ marginBottom: 12 }}>
+            <label className={styles.field}>
+              Период от
+              <input type="date" value={dateFrom} onChange={e => setDateFrom(e.target.value)} className={styles.input} />
+            </label>
+            <label className={styles.field}>
+              Период до
+              <input type="date" value={dateTo} onChange={e => setDateTo(e.target.value)} className={styles.input} />
+            </label>
+            <label className={styles.field}>
+              Список
+              <select
+                value={selectedListId}
+                onChange={e => handleListChange(e.target.value)}
+                className={styles.select}
+              >
+                <option value="">-- Все --</option>
+                {driverLists.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+              </select>
+            </label>
+            <button className={styles.button} onClick={loadDelays} disabled={loading} style={{ height: 38 }}>
+              {loading ? "..." : "Обновить"}
+            </button>
+          </div>
+
+          {selectedListId === "" && (
+            <div>
+              <span className={styles.muted} style={{ display: "block", marginBottom: 4 }}>Выбор водителей:</span>
+              <div style={{ position: "relative" }}>
+                <input
+                  value={driverQuery}
+                  onChange={(e) => setDriverQuery(e.target.value)}
+                  placeholder="Поиск по ФИО для выбора..."
+                  className={styles.input}
+                  style={{ width: "100%" }}
+                />
+                <div
+                  style={{
+                    marginTop: 8,
+                    maxHeight: 100,
+                    overflowY: "auto",
+                    border: "1px solid var(--card-border)",
+                    borderRadius: 10,
+                    padding: 8,
+                    background: "var(--card-bg)",
+                  }}
+                >
+                  {allDrivers
+                    .map((d) => d.fullName || d.telegramUserId)
+                    .filter((name) => name && name.toLowerCase().includes(driverQuery.toLowerCase()))
+                    .map((name) => {
+                      const isSel = selectedDrivers.includes(name);
+                      return (
+                        <label key={name} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, padding: "2px 0", cursor: "pointer" }}>
+                          <input
+                            type="checkbox"
+                            checked={isSel}
+                            onChange={() =>
+                              setSelectedDrivers((prev) =>
+                                isSel ? prev.filter((x) => x !== name) : [...prev, name]
+                              )
+                            }
+                          />
+                          {name}
+                        </label>
+                      );
+                    })}
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div style={{ marginTop: 12 }}>
+            <span className={styles.muted} style={{ display: "block", marginBottom: 4 }}>Выбор маршрутов:</span>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+              <span style={{ fontSize: 11, opacity: 0.7 }}>Выбор:</span>
+              <div style={{ display: "flex", gap: 4 }}>
+                <button
+                  onClick={() => setSelectedRoutes(routeOptions)}
+                  style={{ fontSize: 10, cursor: "pointer", border: "1px solid var(--card-border)", borderRadius: 999, padding: "2px 8px", background: "var(--card-bg)", color: "var(--text)" }}
+                >
+                  Все
+                </button>
+                <button
+                  onClick={() => setSelectedRoutes([])}
+                  style={{ fontSize: 10, cursor: "pointer", border: "1px solid var(--card-border)", borderRadius: 999, padding: "2px 8px", background: "var(--card-bg)", color: "var(--text)" }}
+                >
+                  Очистить
+                </button>
+              </div>
+            </div>
+            <div style={{ maxHeight: 160, overflowY: "auto", border: "1px solid var(--card-border)", borderRadius: 10, padding: 8, background: "var(--card-bg)" }}>
+              {routeOptions.map((route) => {
+                const isSel = selectedRoutes.includes(route);
+                return (
+                  <label key={route} style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12, padding: "2px 0", cursor: "pointer" }}>
+                    <input
+                      type="checkbox"
+                      checked={isSel}
+                      onChange={() => setSelectedRoutes((prev) => (isSel ? prev.filter((x) => x !== route) : [...prev, route]))}
+                    />
+                    {route}
+                  </label>
+                );
+              })}
+              {routeOptions.length === 0 && <div className={styles.muted}>Нет маршрутов</div>}
+            </div>
+          </div>
+        </div>
+
+        <div className={styles.sidePanel}>
+          <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8, color: "var(--text)" }}>Сводка маршрутов</div>
+          <div style={{ display: "grid", gap: 4 }}>
+            {routeSummary.map(([route, cnt]) => (
+              <div
+                key={route}
+                style={{
+                  fontSize: 12,
+                  display: "flex",
+                  justifyContent: "space-between",
+                  padding: "4px 0",
+                  borderBottom: "1px solid var(--table-border)",
+                }}
+              >
+                <span style={{ fontWeight: 500 }}>{route}</span>
+                <span style={{ color: "var(--accent-color)", fontWeight: 700 }}>{cnt}</span>
+              </div>
+            ))}
+            {routeSummary.length === 0 && <div className={styles.muted}>Нет данных</div>}
+          </div>
+        </div>
+      </div>
+
       {loading ? (
         <div style={{ padding: 40, textAlign: "center" }}>Загрузка данных...</div>
       ) : activeTab === "history" ? (
+        <div>
+          <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 12 }}>
+            <button
+              className={styles.button}
+              onClick={deleteSelected}
+              disabled={selectedIds.size === 0}
+              style={{
+                background: "var(--danger-bg)",
+                color: "var(--danger-text)",
+                opacity: selectedIds.size === 0 ? 0.6 : 1,
+              }}
+            >
+              Удалить выбранные ({selectedIds.size})
+            </button>
+          </div>
         <div className={styles.tableWrap}>
-          {selectedIds.size > 0 && (
-            <div style={{ padding: 12, background: "#fff4f4", borderBottom: "1px solid #fecaca", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ fontSize: 14, fontWeight: 600, color: "#991b1b" }}>Выбрано: {selectedIds.size}</span>
-              <button onClick={deleteSelected} style={{ background: "#ef4444", color: "#fff", border: "none", padding: "6px 12px", borderRadius: 6, cursor: "pointer" }}>Удалить выбранные</button>
-            </div>
-          )}
           <table className={styles.table}>
             <thead>
               <tr>
-                <th className={styles.th} style={{ width: 40 }}></th>
+                <th className={styles.th} style={{ width: 40 }}>
+                  <input
+                    type="checkbox"
+                    checked={selectedIds.size === processedDelays.length && processedDelays.length > 0}
+                    onChange={() => {
+                      if (selectedIds.size === processedDelays.length) setSelectedIds(new Set());
+                      else setSelectedIds(new Set(processedDelays.map(d => d.id)));
+                    }}
+                  />
+                </th>
                 <th className={styles.th}>Дата</th>
-                <th className={styles.th}>Водитель</th>
                 <th className={styles.th}>Маршрут</th>
-                <th className={styles.th}>План / Факт</th>
-                <th className={styles.th}>Опоздание</th>
-                <th className={styles.th}>Авто</th>
+                <th className={styles.th}>Плановое время</th>
+                <th className={styles.th}>Факт назначения</th>
+                <th className={styles.th}>Опоздание (мин)</th>
+                <th className={styles.th}>Водитель</th>
+                <th className={styles.th}>Гос. №</th>
               </tr>
             </thead>
             <tbody>
-              {processedDelays.length === 0 ? (
-                <tr><td colSpan={7} style={{ padding: 24, textAlign: "center", opacity: 0.6 }}>Записей не найдено</td></tr>
-              ) : (
-                processedDelays.map(d => (
-                  <tr key={d.id} onClick={() => toggleSelect(d.id)} style={{ cursor: "pointer", background: selectedIds.has(d.id) ? "#fff1f2" : "inherit" }}>
-                    <td className={styles.td}>
-                      <input type="checkbox" checked={selectedIds.has(d.id)} readOnly />
-                    </td>
-                    <td className={styles.td}>{formatDate(d.delayDate)}</td>
-                    <td className={styles.td} style={{ fontWeight: 600 }}>{d.driverName}</td>
-                    <td className={styles.td}>{d.routeName}</td>
-                    <td className={styles.td}>{d.plannedTime} / {d.assignedTime}</td>
-                    <td className={styles.td}>
-                      <span style={{ marginRight: 6 }}>{getDelayEmoji(d.delayMinutes)}</span>
-                      <strong>{d.delayMinutes} мин.</strong>
-                    </td>
-                    <td className={styles.td}>{d.plateNumber || "—"}</td>
-                  </tr>
-                ))
-              )}
+              {processedDelays.map(d => (
+                <tr key={d.id}>
+                  <td className={styles.td}>
+                    <input type="checkbox" checked={selectedIds.has(d.id)} onChange={() => toggleSelect(d.id)} />
+                  </td>
+                  <td className={styles.td}>{formatDate(d.delayDate)}</td>
+                  <td className={styles.td}>{d.routeName}</td>
+                  <td className={styles.td}>{d.plannedTime || "—"}</td>
+                  <td className={styles.td}>{d.assignedTime || "—"}</td>
+                  <td className={styles.td}>{getDelayEmoji(d.delayMinutes)} {d.delayMinutes}</td>
+                  <td className={styles.td}>{d.driverName}</td>
+                  <td className={styles.td}>{d.plateNumber || "—"}</td>
+                </tr>
+              ))}
             </tbody>
           </table>
+          {processedDelays.length === 0 && <div style={{ padding: 16, opacity: 0.6 }}>Нет данных</div>}
         </div>
+      </div>
       ) : activeTab === "analytics" ? (
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))", gap: 16 }}>
-          {analyticsData.length === 0 ? (
-            <div style={{ gridColumn: "1/-1", padding: 40, textAlign: "center", opacity: 0.6 }}>Нет данных для аналитики</div>
-          ) : (
-            analyticsData.map((stat, idx) => (
-              <div key={stat.driverName} style={{ background: "#fff", padding: 20, borderRadius: 16, border: "1px solid #e9e9f2", boxShadow: "0 4px 6px -1px rgba(0,0,0,0.05)", position: "relative" }}>
-                <div style={{ position: "absolute", top: 12, right: 16, fontSize: 24, fontWeight: 900, opacity: 0.1 }}>#{idx + 1}</div>
-                <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 16, color: "#1e293b", borderBottom: "1px solid #f1f5f9", paddingBottom: 12, paddingRight: 40 }}>
-                  {stat.driverName}
-                </div>
-                
-                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 20 }}>
-                  <div style={{ textAlign: "center", flex: 1 }}>
-                    <div style={{ fontSize: 24 }}>🔴</div>
-                    <div style={{ fontSize: 20, fontWeight: 800 }}>{stat.red}</div>
-                    <div style={{ fontSize: 11, opacity: 0.6, fontWeight: 600 }}>КРИТИЧНО</div>
-                  </div>
-                  <div style={{ textAlign: "center", flex: 1, borderLeft: "1px solid #f1f5f9", borderRight: "1px solid #f1f5f9" }}>
-                    <div style={{ fontSize: 24 }}>🟡</div>
-                    <div style={{ fontSize: 20, fontWeight: 800 }}>{stat.yellow}</div>
-                    <div style={{ fontSize: 11, opacity: 0.6, fontWeight: 600 }}>СРЕДНЕ</div>
-                  </div>
-                  <div style={{ textAlign: "center", flex: 1 }}>
-                    <div style={{ fontSize: 24 }}>🟢</div>
-                    <div style={{ fontSize: 20, fontWeight: 800 }}>{stat.green}</div>
-                    <div style={{ fontSize: 11, opacity: 0.6, fontWeight: 600 }}>МАЛОЕ</div>
-                  </div>
-                </div>
-
-                <div style={{ background: "#f8fafc", padding: "12px 16px", borderRadius: 12, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <span style={{ fontSize: 14, fontWeight: 600, color: "#64748b" }}>Всего опозданий:</span>
-                  <span style={{ fontSize: 18, fontWeight: 800, color: "#0f172a" }}>{stat.total}</span>
-                </div>
-                <div style={{ background: "#f8fafc", padding: "12px 16px", borderRadius: 12, display: "flex", justifyContent: "space-between", alignItems: "center", marginTop: 8 }}>
-                  <span style={{ fontSize: 14, fontWeight: 600, color: "#64748b" }}>Общее время опозданий:</span>
-                  <span style={{ fontSize: 18, fontWeight: 800, color: "#0f172a" }}>{stat.totalMinutes} мин.</span>
-                </div>
-                
-                {stat.red > 0 && (
-                  <div style={{ marginTop: 12, fontSize: 12, color: "#991b1b", background: "#fef2f2", padding: "8px 12px", borderRadius: 8, fontWeight: 500 }}>
-                    ⚠️ Требует внимания: {Math.round((stat.red / stat.total) * 100)}% критических
-                  </div>
-                )}
+        <div className={styles.ratingGrid}>
+          {analyticsData.map(d => (
+            <div key={d.driverName} className={styles.ratingCard}>
+              <div className={styles.ratingHeader}>
+                <div className={styles.ratingName}>{d.driverName}</div>
               </div>
-            ))
-          )}
+              <div className={styles.ratingStats}>
+                <div className={`${styles.ratingStat} ${styles.ratingAccentBlue}`}>
+                  <div className={styles.ratingLabel}>Всего опозданий</div>
+                  <div className={styles.ratingValue}>{d.total}</div>
+                </div>
+                <div className={`${styles.ratingStat} ${styles.ratingAccentBlue}`}>
+                  <div className={styles.ratingLabel}>Минут всего</div>
+                  <div className={styles.ratingValue}>{d.totalMinutes}</div>
+                </div>
+                <div className={`${styles.ratingStat} ${styles.ratingAccentRed}`}>
+                  <div className={styles.ratingLabel}>🔴 &ge; 21 мин</div>
+                  <div className={styles.ratingValue}>{d.red}</div>
+                </div>
+                <div className={`${styles.ratingStat} ${styles.ratingAccentYellow}`}>
+                  <div className={styles.ratingLabel}>🟡 11–20 мин</div>
+                  <div className={styles.ratingValue}>{d.yellow}</div>
+                </div>
+                <div className={`${styles.ratingStat} ${styles.ratingAccentGreen}`}>
+                  <div className={styles.ratingLabel}>🟢 0–10 мин</div>
+                  <div className={styles.ratingValue}>{d.green}</div>
+                </div>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12, marginTop: 12 }}>
+                <div>
+                  <div className={styles.ratingLabel} style={{ marginBottom: 6 }}>Маршруты</div>
+                  <div style={{ display: "grid", gap: 6 }}>
+                    {Object.entries(d.routes).map(([route, cnt]) => (
+                      <div key={route} className={styles.itemCard}>
+                        <div className={styles.itemLabel}>{route}</div>
+                        <div className={styles.itemValue}>Смен: {cnt}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <div className={styles.ratingLabel} style={{ marginBottom: 6 }}>Автомобили</div>
+                  <div style={{ display: "grid", gap: 6 }}>
+                    {Object.entries(d.vehicles).map(([plate, cnt]) => (
+                      <div key={plate} className={styles.itemCard}>
+                        <div className={styles.itemLabel}>{plate}</div>
+                        <div className={styles.itemValue}>Смен: {cnt}</div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+          {analyticsData.length === 0 && <div style={{ opacity: 0.6 }}>Нет данных</div>}
         </div>
       ) : (
-        <div style={{ background: "#fff", padding: 24, borderRadius: 16, border: "1px solid #e9e9f2" }}>
-          <h2 style={{ marginTop: 0, marginBottom: 20 }}>🏆 Рейтинг водителей по опозданиям</h2>
-          <div style={{ maxWidth: 800 }}>
-            {analyticsData.length === 0 ? (
-              <p style={{ opacity: 0.6 }}>Нет данных для составления рейтинга</p>
-            ) : (
-              <table style={{ width: "100%", borderCollapse: "collapse" }}>
-                <thead>
-                  <tr style={{ textAlign: "left", fontSize: 14, opacity: 0.6 }}>
-                    <th style={{ padding: "12px 8px", borderBottom: "2px solid #f1f5f9" }}>Место</th>
-                    <th style={{ padding: "12px 8px", borderBottom: "2px solid #f1f5f9" }}>Водитель</th>
-                    <th 
-                      style={{ padding: "12px 8px", borderBottom: "2px solid #f1f5f9", textAlign: "center", cursor: "pointer", background: ratingSortBy === "total" ? "#f0f4f8" : "transparent" }}
-                      onClick={() => handleRatingSort("total")}
-                    >
-                      Всего{getSortIndicator("total")}
-                    </th>
-                    <th 
-                      style={{ padding: "12px 8px", borderBottom: "2px solid #f1f5f9", textAlign: "center", cursor: "pointer", background: ratingSortBy === "red" ? "#f0f4f8" : "transparent" }}
-                      onClick={() => handleRatingSort("red")}
-                    >
-                      🔴{getSortIndicator("red")}
-                    </th>
-                    <th 
-                      style={{ padding: "12px 8px", borderBottom: "2px solid #f1f5f9", textAlign: "center", cursor: "pointer", background: ratingSortBy === "yellow" ? "#f0f4f8" : "transparent" }}
-                      onClick={() => handleRatingSort("yellow")}
-                    >
-                      🟡{getSortIndicator("yellow")}
-                    </th>
-                    <th 
-                      style={{ padding: "12px 8px", borderBottom: "2px solid #f1f5f9", textAlign: "center", cursor: "pointer", background: ratingSortBy === "green" ? "#f0f4f8" : "transparent" }}
-                      onClick={() => handleRatingSort("green")}
-                    >
-                      🟢{getSortIndicator("green")}
-                    </th>
-                    <th 
-                      style={{ padding: "12px 8px", borderBottom: "2px solid #f1f5f9", textAlign: "right", cursor: "pointer", background: ratingSortBy === "totalMinutes" ? "#f0f4f8" : "transparent" }}
-                      onClick={() => handleRatingSort("totalMinutes")}
-                    >
-                      Общее время{getSortIndicator("totalMinutes")}
-                    </th>
+        <div className={styles.card}>
+          <div style={{ fontWeight: 700, marginBottom: 12 }}>Рейтинг (общий)</div>
+          <div className={styles.tableWrap}>
+            <table className={styles.table}>
+              <thead>
+                <tr>
+                  <th className={styles.th}>#</th>
+                  <th className={styles.th} style={{ cursor: "pointer" }} onClick={() => {
+                    setRatingSortBy("total");
+                    setRatingSortDir(prev => (ratingSortBy === "total" && prev === "desc") ? "asc" : "desc");
+                  }}>
+                    Всего {ratingSortBy === "total" ? (ratingSortDir === "desc" ? "↓" : "↑") : ""}
+                  </th>
+                  <th className={styles.th} style={{ cursor: "pointer", color: "var(--error-color)" }} onClick={() => {
+                    setRatingSortBy("red");
+                    setRatingSortDir(prev => (ratingSortBy === "red" && prev === "desc") ? "asc" : "desc");
+                  }}>
+                    🔴 {ratingSortBy === "red" ? (ratingSortDir === "desc" ? "↓" : "↑") : ""}
+                  </th>
+                  <th className={styles.th} style={{ cursor: "pointer", color: "var(--status-pending-text)" }} onClick={() => {
+                    setRatingSortBy("yellow");
+                    setRatingSortDir(prev => (ratingSortBy === "yellow" && prev === "desc") ? "asc" : "desc");
+                  }}>
+                    🟡 {ratingSortBy === "yellow" ? (ratingSortDir === "desc" ? "↓" : "↑") : ""}
+                  </th>
+                  <th className={styles.th} style={{ cursor: "pointer", color: "var(--success-color)" }} onClick={() => {
+                    setRatingSortBy("green");
+                    setRatingSortDir(prev => (ratingSortBy === "green" && prev === "desc") ? "asc" : "desc");
+                  }}>
+                    🟢 {ratingSortBy === "green" ? (ratingSortDir === "desc" ? "↓" : "↑") : ""}
+                  </th>
+                  <th className={styles.th} style={{ cursor: "pointer" }} onClick={() => {
+                    setRatingSortBy("totalMinutes");
+                    setRatingSortDir(prev => (ratingSortBy === "totalMinutes" && prev === "desc") ? "asc" : "desc");
+                  }}>
+                    Минут {ratingSortBy === "totalMinutes" ? (ratingSortDir === "desc" ? "↓" : "↑") : ""}
+                  </th>
+                  <th className={styles.th}>Водитель</th>
+                </tr>
+              </thead>
+              <tbody>
+                {analyticsData.map((d, index) => (
+                  <tr key={d.driverName}>
+                    <td className={styles.td}>{index + 1}</td>
+                    <td className={styles.td}>{d.total}</td>
+                    <td className={styles.td}>{d.red}</td>
+                    <td className={styles.td}>{d.yellow}</td>
+                    <td className={styles.td}>{d.green}</td>
+                    <td className={styles.td}>{d.totalMinutes}</td>
+                    <td className={styles.td}>{d.driverName}</td>
                   </tr>
-                </thead>
-                <tbody>
-                  {analyticsData.map((stat, idx) => (
-                    <tr key={stat.driverName} style={{ borderBottom: "1px solid #f1f5f9" }}>
-                      <td style={{ padding: "16px 8px", fontWeight: 800, fontSize: 18, color: idx < 3 ? "#d97706" : "#64748b" }}>
-                        {idx === 0 ? "🥇" : idx === 1 ? "🥈" : idx === 2 ? "🥉" : `#${idx + 1}`}
-                      </td>
-                      <td style={{ padding: "16px 8px", fontWeight: 600 }}>{stat.driverName}</td>
-                      <td style={{ padding: "16px 8px", textAlign: "center", fontWeight: ratingSortBy === "total" ? 800 : 700 }}>{stat.total}</td>
-                      <td style={{ padding: "16px 8px", textAlign: "center", color: "#ef4444", fontWeight: ratingSortBy === "red" ? 800 : 500 }}>{stat.red}</td>
-                      <td style={{ padding: "16px 8px", textAlign: "center", color: "#f59e0b", fontWeight: ratingSortBy === "yellow" ? 800 : 500 }}>{stat.yellow}</td>
-                      <td style={{ padding: "16px 8px", textAlign: "center", color: "#10b981", fontWeight: ratingSortBy === "green" ? 800 : 500 }}>{stat.green}</td>
-                      <td style={{ padding: "16px 8px", textAlign: "right", fontWeight: ratingSortBy === "totalMinutes" ? 800 : 500 }}>{stat.totalMinutes} мин.</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
+                ))}
+                {analyticsData.length === 0 && <tr><td className={styles.td} colSpan={7}>Нет данных</td></tr>}
+              </tbody>
+            </table>
           </div>
         </div>
       )}

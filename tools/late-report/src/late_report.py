@@ -1420,9 +1420,11 @@ def process_docs_report(config: Dict, attachments: List[Tuple[int, int, str, byt
                 all_docs_dfs.append(df)
                 # Добавляем ключ в processed_keys после успешной обработки
                 processed_keys[attachment_key] = time.time()
+                processed_keys[f"hash:{file_hash}"] = time.time()
                 logger.info(f"Found {len(df)} docs records in {filename} (UID {uid}, key: {attachment_key[:20]}...)")
             else:
                 processed_keys[attachment_key] = time.time()
+                processed_keys[f"hash:{file_hash}"] = time.time()
                 logger.info(f"No docs records in {filename} (UID {uid}), but file processed")
         except Exception as e:
             logger.error(f"Error processing docs-report file {filename} (UID {uid}): {e}")
@@ -1596,18 +1598,16 @@ def main():
         # Генерируем ключ для вложения: uid:att_index:sha256
         file_hash = hashlib.sha256(file_data).hexdigest()
         attachment_key = f"{uid}:{att_index}:{file_hash}"
+        hash_key = f"hash:{file_hash}"
         
         # Проверка на дубликаты (если не включен FORCE_RESEND)
         if not force_resend:
-            if attachment_key in processed_keys:
+            if attachment_key in processed_keys or hash_key in processed_keys:
                 logger.debug(f"Skipping already processed attachment: {filename} (UID {uid}, key: {attachment_key[:20]}...)")
                 skipped_count += 1
                 continue
         
-        internaldate = locals().get('internaldate')
-        if internaldate is None:
-            internaldate = datetime.now(ZoneInfo(config.get('report_tz', 'UTC')))
-        new_attachments.append((uid, att_index, filename, file_data, internaldate))
+        new_attachments.append((uid, att_index, filename, file_data, _internaldate))
     
     logger.info(f"Filtered: {skipped_count} already processed, {len(new_attachments)} new attachments to process")
     
@@ -1679,6 +1679,7 @@ def main():
     
     logger.info(f"Classified: {len(late_attachments)} LATE, {len(docs_attachments)} DOCS attachments")
 
+    latest_date = None
     if late_attachments:
         report_tz = config.get('report_tz', 'Europe/Moscow')
         try:
@@ -1708,6 +1709,7 @@ def main():
                     file_hash = hashlib.sha256(file_data).hexdigest()
                     attachment_key = f"{uid}:{att_index}:{file_hash}"
                     processed_keys[attachment_key] = time.time()
+                    processed_keys[f"hash:{file_hash}"] = time.time()
                     skipped += 1
             if skipped:
                 save_processed_keys(config['state_file'], processed_keys)
@@ -1736,6 +1738,7 @@ def main():
                     logger.warning(f"File {filename} (UID {uid}) does not contain 'Опоздание, мин.' column, skipping")
                     # Помечаем как обработанное, чтобы не пытаться снова
                     processed_keys[attachment_key] = time.time()
+                    processed_keys[f"hash:{file_hash}"] = time.time()
                     continue
             
                 # Извлечение опоздавших
@@ -1762,6 +1765,7 @@ def main():
                 
                 # Сохраняем ключ СРАЗУ после обработки файла (независимо от отправки)
                 processed_keys[attachment_key] = time.time()
+                processed_keys[f"hash:{file_hash}"] = time.time()
                 # Сохраняем state сразу после каждого файла
                 save_processed_keys(config['state_file'], processed_keys)
             except Exception as e:
@@ -1779,15 +1783,17 @@ def main():
     if all_late_records or config['send_if_empty']:
         logger.info(f"Total late records before deduplication: {len(all_late_records)}")
         
-        # Дедупликация: группировка по (fio, route_name, plan_time) и оставление записи с максимальным delay
+        # Дедупликация: по (fio, route_name, plan_time, assigned_time, plate) с максимальным delay
         # Используем словарь для группировки
         dedup_dict = {}
         for record in all_late_records:
-            # Ключ для дедупликации: (driver_name, route_name, planned_time)
+            # Ключ для дедупликации: (driver_name, route_name, planned_time, assigned_time, plate_number)
             key = (
                 record.get('driver_name', '').strip(),
                 record.get('route_name', '').strip(),
-                record.get('planned_time', '').strip()
+                record.get('planned_time', '').strip(),
+                record.get('assigned_time', '').strip(),
+                record.get('plate_number', '').strip()
             )
             
             # Если такой ключ уже есть, сравниваем delay и оставляем запись с большим delay
@@ -1820,13 +1826,16 @@ def main():
                     send_telegram_text(config, remaining)
                 
                 # Сохраняем данные в базу через API
-                # Используем текущую дату в московском времени
+                # Используем дату отчета из письма (INTERNALDATE), если есть
                 report_tz = config.get('report_tz', 'Europe/Moscow')
                 try:
                     tz = ZoneInfo(report_tz)
-                except:
+                except Exception:
                     tz = ZoneInfo('UTC')
-                delay_date = datetime.now(tz).date()
+                if latest_date:
+                    delay_date = latest_date
+                else:
+                    delay_date = datetime.now(tz).date()
                 delay_datetime = datetime.combine(delay_date, datetime.min.time()).replace(tzinfo=tz)
                 save_late_delays_to_api(config, unique_records, delay_datetime)
                 

@@ -13,6 +13,7 @@ export type Vehicle = {
   plateNumber: string | null;
   isActive?: boolean;
   isPinned?: boolean;
+  isTelegramEnabled?: boolean;
   makeModel?: string | null;
   year?: number | null;
   vin?: string | null;

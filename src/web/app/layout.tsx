@@ -14,8 +14,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
               style={{ 
                 marginLeft: 240, 
                 flex: 1, 
-                padding: 24, 
-                fontFamily: "Arial"
+                padding: 24
               }}
             >
               {children}

@@ -98,7 +98,7 @@ export default function AddPage() {
       setNewRouteName("");
       const fresh = await getJson("/api/lists");
       if (fresh.ok) {
-        const updated = (fresh.data as CustomList[]).find(l => l.id === selectedList.id);
+        const updated = (fresh.data as CustomList[]).find((l) => l.id === selectedList.id);
         if (updated) setSelectedList(updated);
       }
     }
@@ -125,9 +125,9 @@ export default function AddPage() {
 
   return (
     <div>
-      <h1 style={{ margin: "0 0 24px 0" }}>Авто и водители</h1>
+      <h1 className={styles.pageTitle}>Авто и водители</h1>
 
-      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
+      <div className={styles.tabBar}>
         {[
           { id: "drivers", label: "Водители" },
           { id: "vehicles", label: "Авто" },
@@ -136,12 +136,8 @@ export default function AddPage() {
         ].map((t) => (
           <button
             key={t.id}
-            className={styles.button}
+            className={`${styles.tabButton} ${activeTab === t.id ? styles.tabButtonActive : ""}`}
             onClick={() => setActiveTab(t.id as any)}
-            style={{
-              backgroundColor: activeTab === t.id ? "#eef2ff" : "#fff",
-              borderColor: activeTab === t.id ? "#4338ca" : "#d7d7e0",
-            }}
           >
             {t.label}
           </button>
@@ -149,7 +145,7 @@ export default function AddPage() {
       </div>
 
       {activeTab === "drivers" && (
-        <div style={{ background: "#fff", padding: 20, borderRadius: 16, border: "1px solid #e9e9f2" }}>
+        <div className={styles.card}>
           <h3 style={{ marginTop: 0 }}>Новый водитель</h3>
           <DriverForm onSave={loadData} />
           <div style={{ marginTop: 24 }}>
@@ -159,7 +155,7 @@ export default function AddPage() {
       )}
 
       {activeTab === "vehicles" && (
-        <div style={{ background: "#fff", padding: 20, borderRadius: 16, border: "1px solid #e9e9f2" }}>
+        <div className={styles.card}>
           <h3 style={{ marginTop: 0 }}>Новый автомобиль</h3>
           <VehicleForm onSave={loadData} />
           <div style={{ marginTop: 24 }}>
@@ -168,10 +164,10 @@ export default function AddPage() {
         </div>
       )}
       {activeTab === "routes" && (
-        <div style={{ background: "#fff", padding: 20, borderRadius: 16, border: "1px solid #e9e9f2" }}>
+        <div className={styles.card}>
           <h3 style={{ marginTop: 0 }}>Маршруты</h3>
           <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-            <input value={newRoute} onChange={(e) => setNewRoute(e.target.value)} placeholder="Название маршрута" style={{ flex: 1, padding: 10, borderRadius: 8, border: "1px solid #d7d7e0" }} />
+            <input value={newRoute} onChange={(e) => setNewRoute(e.target.value)} placeholder="Название маршрута" className={styles.input} style={{ flex: 1 }} />
             <button className={styles.button} onClick={() => { if (!newRoute) return; setRoutes(prev => prev.includes(newRoute) ? prev : [newRoute, ...prev].sort()); setNewRoute(""); }}>
               Добавить
             </button>
@@ -181,7 +177,19 @@ export default function AddPage() {
               <div style={{ padding: 24, textAlign: "center", opacity: 0.6 }}>Маршрутов пока нет</div>
             ) : (
               routes.map(r => (
-                <div key={r} style={{ padding: 12, border: "1px solid #e2e8f0", borderRadius: 12, display: "flex", justifyContent: "space-between", alignItems: "center", gap: 12 }}>
+                <div
+                  key={r}
+                  style={{
+                    padding: 12,
+                    border: "1px solid var(--card-border)",
+                    borderRadius: 12,
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    gap: 12,
+                    background: "var(--card-bg)",
+                  }}
+                >
                   <span style={{ fontWeight: 600 }}>{r}</span>
                   <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                     <select
@@ -200,14 +208,17 @@ export default function AddPage() {
                         }
                         e.target.value = "";
                       }}
-                      style={{ padding: "4px 8px", borderRadius: 8, border: "1px solid #d7d7e0", fontSize: 12 }}
+                      className={styles.select}
                     >
                       <option value="">+ В список</option>
                       {lists.filter(l => l.type === "ROUTE").map(l => (
                         <option key={l.id} value={l.id}>{l.name}</option>
                       ))}
                     </select>
-                    <button onClick={() => setRoutes(prev => prev.filter(x => x !== r))} style={{ color: "#ef4444", background: "none", border: "none", cursor: "pointer" }}>
+                    <button
+                      onClick={() => setRoutes(prev => prev.filter(x => x !== r))}
+                      style={{ color: "var(--danger-text)", background: "none", border: "none", cursor: "pointer" }}
+                    >
                       Удалить
                     </button>
                   </div>
@@ -216,7 +227,7 @@ export default function AddPage() {
               ))
             )}
           </div>
-          <div style={{ marginTop: 12, fontSize: 12, color: "#64748b" }}>
+          <div className={styles.muted} style={{ marginTop: 12 }}>
             Маршруты загружаются из графика смен. Добавленные здесь — локальный список.
           </div>
         </div>
@@ -224,28 +235,43 @@ export default function AddPage() {
 
       {activeTab === "lists" && (
         <div style={{ display: "grid", gridTemplateColumns: "1fr 2fr", gap: 24 }}>
-          <div style={{ background: "#fff", padding: 20, borderRadius: 16, border: "1px solid #e9e9f2", height: "fit-content" }}>
+          <div className={styles.card} style={{ height: "fit-content" }}>
             <h3 style={{ marginTop: 0 }}>Создать список</h3>
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-              <input value={newListName} onChange={(e) => setNewListName(e.target.value)} placeholder="Название списка" style={{ padding: 10, borderRadius: 8, border: "1px solid #d7d7e0" }} />
-              <select value={newListType} onChange={(e) => setNewListType(e.target.value as any)} style={{ padding: 10, borderRadius: 8, border: "1px solid #d7d7e0" }}>
+              <input value={newListName} onChange={(e) => setNewListName(e.target.value)} placeholder="Название списка" className={styles.input} />
+              <select value={newListType} onChange={(e) => setNewListType(e.target.value as any)} className={styles.select}>
                 <option value="DRIVER">Для водителей</option>
                 <option value="VEHICLE">Для автомобилей</option>
                 <option value="ROUTE">Для маршрутов</option>
               </select>
-              <button className={styles.button} onClick={createList} style={{ background: "#4338ca", color: "#fff", border: "none" }}>Создать</button>
-              {listError && <div style={{ color: "#ef4444", fontSize: 12 }}>{listError}</div>}
+              <button
+                className={styles.button}
+                onClick={createList}
+                style={{ background: "var(--primary-bg)", color: "var(--primary-text)", border: "none" }}
+              >
+                Создать
+              </button>
+              {listError && <div style={{ color: "var(--error-color)", fontSize: 12 }}>{listError}</div>}
             </div>
           </div>
 
-          <div style={{ background: "#fff", padding: 20, borderRadius: 16, border: "1px solid #e9e9f2" }}>
+          <div className={styles.card}>
             <h3 style={{ marginTop: 0 }}>Существующие списки</h3>
             <div style={{ display: "grid", gap: 12 }}>
               {lists.map((l) => (
                 <div
                   key={l.id}
                   onClick={() => setSelectedList(l)}
-                  style={{ padding: 12, border: "1px solid #eee", borderRadius: 12, display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer" }}
+                  style={{
+                    padding: 12,
+                    border: "1px solid var(--card-border)",
+                    borderRadius: 12,
+                    display: "flex",
+                    justifyContent: "space-between",
+                    alignItems: "center",
+                    cursor: "pointer",
+                    background: "var(--card-bg)",
+                  }}
                 >
                   <div>
                     <div style={{ fontWeight: 700 }}>{l.name}</div>
@@ -260,46 +286,31 @@ export default function AddPage() {
       )}
 
       {selectedList && (
-        <div style={{ position: "fixed", top: 0, left: 0, right: 0, bottom: 0, background: "rgba(0,0,0,0.5)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 1000 }}>
-          <div style={{ background: "#fff", padding: 24, borderRadius: 20, width: "100%", maxWidth: 500, maxHeight: "80vh", display: "flex", flexDirection: "column" }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20 }}>
-              <h3 style={{ margin: 0 }}>Группа: {selectedList.name}</h3>
-              <button onClick={() => setSelectedList(null)} style={{ background: "none", border: "none", fontSize: 24, cursor: "pointer" }}>×</button>
-            </div>
-
-            <div style={{ overflowY: "auto", flex: 1, paddingRight: 8 }}>
-            {selectedList.type === "ROUTE" && (
-<div style={{ marginBottom: 16, padding: 12, background: "#f8fafc", borderRadius: 12, border: "1px solid #e2e8f0" }}>
-              <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 8 }}>Добавить маршрут</div>
-              <div style={{ display: "flex", gap: 8 }}>
-                <input value={newRouteName} onChange={(e) => setNewRouteName(e.target.value)} placeholder="Название маршрута" style={{ flex: 1, padding: 8, borderRadius: 8, border: "1px solid #d7d7e0" }} />
-                <button onClick={addRouteToList} className={styles.button} style={{ padding: "6px 12px" }}>Добавить</button>
-              </div>
-            </div>
-            )}
-
-              {selectedList.items.length === 0 ? (
-                <div style={{ padding: 40, textAlign: "center", opacity: 0.5 }}>В этом списке пока никого нет</div>
-              ) : (
-                <div style={{ display: "grid", gap: 10 }}>
-                  {selectedList.items.map((item) => {
-                    const driver = drivers.find((d) => d.id === item.driverId);
-                    const vehicle = vehicles.find((v) => v.id === item.vehicleId);
-                    const name = driver ? (driver.fullName || driver.telegramUserId) : vehicle ? vehicle.plateNumber : item.routeName || "???";
-                    return (
-                      <div key={item.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "10px 16px", background: "#f8fafc", borderRadius: 12 }}>
-                        <span style={{ fontWeight: 600 }}>{name}</span>
-                        <button onClick={() => removeFromList(item.id)} style={{ color: "#ef4444", background: "none", border: "none", cursor: "pointer", fontSize: 14 }}>Удалить</button>
-                      </div>
-                    );
-                  })}
+        <div className={styles.detailOverlay}>
+          <div className={styles.detailCard} style={{ maxWidth: 500 }}>
+            <h3 style={{ marginTop: 0 }}>Список: {selectedList.name}</h3>
+            <div style={{ maxHeight: 300, overflowY: "auto", marginBottom: 16 }}>
+              {selectedList.items.length === 0 && <div style={{ opacity: 0.6 }}>Список пуст</div>}
+              {selectedList.items.map((item) => (
+                <div key={item.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+                  <span>
+                    {selectedList.type === "DRIVER" 
+                      ? drivers.find((d) => d.id === item.driverId)?.fullName || drivers.find((d) => d.id === item.driverId)?.telegramUserId 
+                      : selectedList.type === "VEHICLE" 
+                      ? vehicles.find((v) => v.id === item.vehicleId)?.plateNumber 
+                      : item.routeName}
+                  </span>
+                  <button onClick={() => removeFromList(item.id)} style={{ background: "none", border: "none", cursor: "pointer" }}>🗑️</button>
                 </div>
-              )}
+              ))}
             </div>
-
-            <div style={{ marginTop: 24 }}>
-              <button onClick={() => setSelectedList(null)} className={styles.button} style={{ width: "100%" }}>Закрыть</button>
-            </div>
+            {selectedList.type === "ROUTE" && (
+              <div style={{ display: "flex", gap: 8 }}>
+                <input value={newRouteName} onChange={(e) => setNewRouteName(e.target.value)} placeholder="Добавить маршрут" className={styles.input} style={{ flex: 1 }} />
+                <button className={styles.button} onClick={addRouteToList}>Добавить</button>
+              </div>
+            )}
+            <button className={styles.button} onClick={() => setSelectedList(null)} style={{ marginTop: 16 }}>Закрыть</button>
           </div>
         </div>
       )}

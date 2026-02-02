@@ -58,16 +58,16 @@ export default function AuthGuard({ children }: Props) {
   if (authed) return <>{children}</>;
 
   return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "#f5f5f5" }}>
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--background)" }}>
       <form
         onSubmit={submit}
-        style={{ background: "#fff", padding: 20, borderRadius: 12, boxShadow: "0 8px 30px rgba(0,0,0,0.1)", width: 320 }}
+        style={{ background: "var(--card-bg)", color: "var(--text)", padding: 20, borderRadius: 12, boxShadow: "var(--card-shadow)", border: "1px solid var(--card-border)", width: 320 }}
       >
         <h3 style={{ marginTop: 0, marginBottom: 12 }}>Вход</h3>
-        {error && <div style={{ color: "red", marginBottom: 8 }}>{error}</div>}
+        {error && <div style={{ color: "var(--error-color)", marginBottom: 8 }}>{error}</div>}
         <label style={{ display: "block", marginBottom: 8 }}>
           Логин
-          <input name="login" defaultValue="" style={{ width: "100%", padding: 8, borderRadius: 8, border: "1px solid #d7d7e0" }} autoComplete="username" />
+          <input name="login" defaultValue="" style={{ width: "100%", padding: 8, borderRadius: 8, border: "1px solid var(--input-border)", background: "var(--input-bg)", color: "var(--text)" }} autoComplete="username" />
         </label>
         <label style={{ display: "block", marginBottom: 8 }}>
           Пароль
@@ -75,11 +75,11 @@ export default function AuthGuard({ children }: Props) {
             name="password"
             type="password"
             defaultValue=""
-            style={{ width: "100%", padding: 8, borderRadius: 8, border: "1px solid #d7d7e0" }}
+            style={{ width: "100%", padding: 8, borderRadius: 8, border: "1px solid var(--input-border)", background: "var(--input-bg)", color: "var(--text)" }}
             autoComplete="current-password"
           />
         </label>
-        <button type="submit" style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid #d7d7e0", background: "#4338ca", color: "#fff" }}>
+        <button type="submit" style={{ padding: "8px 12px", borderRadius: 8, border: "1px solid var(--input-border)", background: "var(--primary-bg)", color: "var(--primary-text)" }}>
           Войти
         </button>
       </form>

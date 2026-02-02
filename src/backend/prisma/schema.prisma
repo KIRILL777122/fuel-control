@@ -1,6 +1,6 @@
 generator client {
-  provider      = "prisma-client-js"
-  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+  provider = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl", "linux-musl-openssl-3.0.x"]
 }
 
 datasource db {
@@ -9,23 +9,23 @@ datasource db {
 }
 
 model Driver {
-  id                   String         @id @default(cuid())
-  telegramUserId       String         @unique
-  fullName             String
-  firstName            String?
-  lastName             String?
-  middleName           String?
-  isActive             Boolean        @default(true)
-  isPinned             Boolean        @default(false)
-  pendingMileage       Int?
+  id             String   @id @default(cuid())
+  telegramUserId String   @unique
+  fullName       String
+  firstName      String?
+  lastName       String?
+  middleName     String?
+  isActive       Boolean  @default(true)
+  isPinned       Boolean  @default(false)
+  pendingMileage Int?
   pendingReceiptFileId String?
-  pendingVehicleId     String?
+  pendingVehicleId String?
   pendingPaymentMethod PaymentMethod?
-  pendingReceiptId     String?
-  pendingStep          String?
-  lastSeenAt           DateTime?
-  createdAt            DateTime       @default(now())
-  updatedAt            DateTime       @updatedAt
+  pendingReceiptId String?
+  pendingStep    String?
+  lastSeenAt     DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   receipts       Receipt[]
   payouts        DriverPayment[]
@@ -34,92 +34,73 @@ model Driver {
 }
 
 model Vehicle {
-  id                  String    @id @default(cuid())
-  name                String
-  plateNumber         String    @unique
-  makeModel           String?
-  year                Int?
-  vin                 String?
-  engine              String?
-  color               String?
-  purchasedAt         DateTime?
+  id          String   @id @default(cuid())
+  name        String
+  plateNumber String? @unique
+  model       String?
+  makeModel   String?
+  year        Int?
+  vin         String?
+  engine      String?
+  color       String?
+  purchasedAt DateTime?
   purchasedOdometerKm Int?
   currentOdometerKm   Int?
-  notes               String?
-  isActive            Boolean   @default(true)
-  isPinned            Boolean   @default(false)
-  sortOrder           Int       @default(0)
-  createdAt           DateTime  @default(now())
-  updatedAt           DateTime  @updatedAt
+  notes       String?
+  isActive    Boolean  @default(true)
+  isTelegramEnabled Boolean @default(false)
+  isPinned    Boolean  @default(false)
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
 
-  receipts          Receipt[]
-  repairEvents      RepairEvent[]
-  maintenanceItems  MaintenanceItem[]
-  vehiclePartsSpecs VehiclePartsSpec[]
-  accidentEvents    AccidentEvent[]
-  listItems         CustomListItem[]
+  receipts    Receipt[]
+  listItems   CustomListItem[]
 }
 
 model Receipt {
-  id String @id @default(cuid())
+  id           String   @id @default(cuid())
 
-  driverId String
-  driver   Driver @relation(fields: [driverId], references: [id])
+  driverId     String
+  driver       Driver   @relation(fields: [driverId], references: [id])
 
-  vehicleId String
-  vehicle   Vehicle @relation(fields: [vehicleId], references: [id])
+  vehicleId    String
+  vehicle      Vehicle  @relation(fields: [vehicleId], references: [id])
 
-  receiptAt DateTime
-  mileage   Int?
+  receiptAt    DateTime?
+  mileage      Int?
 
-  stationName    String?
-  stationInn     String?
-  paymentMethod  PaymentMethod?
+  stationName  String?
+  stationInn   String?
+  paymentMethod PaymentMethod?
   paymentComment String?
-  reimbursed     Boolean        @default(false)
-  paidByDriver   Boolean        @default(false)
+  reimbursed   Boolean @default(false)
+  paidByDriver Boolean @default(false)
 
-  totalAmount   Decimal    @db.Decimal(12, 2)
-  liters        Decimal?   @db.Decimal(10, 3)
-  pricePerLiter Decimal?   @db.Decimal(12, 4)
-  fuelType      FuelType?
-  fuelGroup     FuelGroup?
-  hasGoods      Boolean    @default(false)
-  goodsAmount   Decimal?   @db.Decimal(12, 2)
-  addressShort  String?
-  imagePath     String?
-  pdfPath       String?
-  qrRaw         String?
-  dataSource    DataSource @default(TELEGRAM)
+  totalAmount  Decimal  @db.Decimal(12,2)
+  liters       Decimal? @db.Decimal(10,3)
+  pricePerLiter Decimal? @db.Decimal(12,4)
+  fuelType     FuelType?
+  fuelGroup    FuelGroup?
+  hasGoods     Boolean @default(false)
+  goodsAmount  Decimal? @db.Decimal(12,2)
+  addressShort String?
+  imagePath    String?
+  pdfPath      String?
+  qrRaw        String?
+  dataSource   DataSource? @default(TELEGRAM)
 
-  raw    Json?
-  status ReceiptStatus @default(DONE)
+  raw          Json?
+  status       ReceiptStatus @default(DONE)
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  items ReceiptItem[]
+  items        ReceiptItem[]
 
   @@index([receiptAt])
   @@index([driverId, receiptAt])
   @@index([vehicleId, receiptAt])
-}
-
-model ReceiptItem {
-  id String @id @default(cuid())
-
-  receiptId String
-  receipt   Receipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
-
-  name      String
-  quantity  Decimal? @db.Decimal(10, 3)
-  unitPrice Decimal? @db.Decimal(12, 2)
-  amount    Decimal? @db.Decimal(12, 2)
-  isFuel    Boolean  @default(false)
-
-  createdAt DateTime @default(now())
-
-  @@index([receiptId])
 }
 
 model Shift {
@@ -144,7 +125,7 @@ model Shift {
 model RouteRate {
   id        String   @id @default(cuid())
   routeName String   @unique
-  rate      Decimal  @db.Decimal(12, 2)
+  rate      Decimal  @db.Decimal(12,2)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
@@ -153,7 +134,7 @@ model DriverPayment {
   id            String   @id @default(cuid())
   driverId      String
   driver        Driver   @relation(fields: [driverId], references: [id])
-  amount        Decimal  @db.Decimal(12, 2)
+  amount        Decimal  @db.Decimal(12,2)
   paymentDate   DateTime @default(now())
   accountedDate DateTime?
   payoutType    String?
@@ -172,7 +153,7 @@ model DriverPaymentDetail {
   id        String   @id @default(cuid())
   driverId  String
   driver    Driver   @relation(fields: [driverId], references: [id])
-  type      String   // SBP, CARD, etc.
+  type      String
   bankName  String?
   account   String
   isDefault Boolean  @default(false)
@@ -185,197 +166,42 @@ model DriverPaymentDetail {
 model CustomList {
   id        String   @id @default(cuid())
   name      String
-  type      String   // DRIVER, VEHICLE
+  type      String
   items     CustomListItem[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 }
 
 model CustomListItem {
-  id           String     @id @default(cuid())
-  listId       String
-  list         CustomList @relation(fields: [listId], references: [id], onDelete: Cascade)
-  driverId     String?
-  driver       Driver?    @relation(fields: [driverId], references: [id])
-  vehicleId    String?
-  vehicle      Vehicle?   @relation(fields: [vehicleId], references: [id])
-  routeName    String?
-  createdAt    DateTime   @default(now())
-  updatedAt    DateTime   @updatedAt
+  id        String     @id @default(cuid())
+  listId    String
+  list      CustomList @relation(fields: [listId], references: [id], onDelete: Cascade)
+  driverId  String?
+  driver    Driver?    @relation(fields: [driverId], references: [id])
+  vehicleId String?
+  vehicle   Vehicle?   @relation(fields: [vehicleId], references: [id])
+  routeName String?
+  createdAt DateTime   @default(now())
+  updatedAt DateTime   @updatedAt
 
   @@index([listId])
 }
 
-model RepairEvent {
-  id             String              @id @default(cuid())
-  vehicleId      String
-  vehicle        Vehicle             @relation(fields: [vehicleId], references: [id])
-  eventType      RepairEventType
-  status         RepairEventStatus   @default(DRAFT)
-  startedAt      DateTime
-  finishedAt     DateTime?
-  odometerKm     Int
-  categoryCode   String
-  subsystemCode  String?
-  symptomsText   String
-  findingsText   String?
-  serviceName    String?
-  paymentStatus  PaymentStatus       @default(UNPAID)
-  totalCostWork  Decimal             @default(0) @db.Decimal(12, 2)
-  totalCostParts Decimal             @default(0) @db.Decimal(12, 2)
-  totalCostOther Decimal             @default(0) @db.Decimal(12, 2)
-  totalCost      Decimal             @default(0) @db.Decimal(12, 2)
-  tags           Json?
-  createdFrom    RepairCreatedFrom   @default(WEB)
-  rawInputText   String?
-  aiParseStatus  RepairAiParseStatus @default(NONE)
-  createdAt      DateTime            @default(now())
-  updatedAt      DateTime            @updatedAt
+model ReceiptItem {
+  id        String   @id @default(cuid())
 
-  works       RepairWork[]
-  parts       RepairPart[]
-  expenses    RepairExpense[]
-  attachments RepairAttachment[]
-  accidents   AccidentEvent[]
+  receiptId String
+  receipt   Receipt  @relation(fields: [receiptId], references: [id], onDelete: Cascade)
 
-  @@index([vehicleId, startedAt])
-  @@index([categoryCode])
-}
+  name      String
+  quantity  Decimal? @db.Decimal(10,3)
+  unitPrice Decimal? @db.Decimal(12,2)
+  amount    Decimal? @db.Decimal(12,2)
+  isFuel    Boolean  @default(false)
 
-model RepairWork {
-  id            String      @id @default(cuid())
-  repairEventId String
-  repairEvent   RepairEvent @relation(fields: [repairEventId], references: [id], onDelete: Cascade)
-  workName      String
-  normHours     Decimal?    @db.Decimal(10, 2)
-  cost          Decimal     @db.Decimal(12, 2)
-  comment       String?
-  createdAt     DateTime    @default(now())
+  createdAt DateTime @default(now())
 
-  @@index([repairEventId])
-}
-
-model RepairPart {
-  id                      String      @id @default(cuid())
-  repairEventId           String
-  repairEvent             RepairEvent @relation(fields: [repairEventId], references: [id], onDelete: Cascade)
-  partName                String
-  brand                   String?
-  partNumber              String?
-  qty                     Decimal     @db.Decimal(10, 2)
-  unitPrice               Decimal     @db.Decimal(12, 2)
-  totalPrice              Decimal     @db.Decimal(12, 2)
-  supplier                String?
-  warrantyUntilDate       DateTime?
-  warrantyUntilOdometerKm Int?
-  comment                 String?
-  createdAt               DateTime    @default(now())
-
-  @@index([repairEventId])
-}
-
-model RepairExpense {
-  id            String      @id @default(cuid())
-  repairEventId String
-  repairEvent   RepairEvent @relation(fields: [repairEventId], references: [id], onDelete: Cascade)
-  name          String
-  cost          Decimal     @db.Decimal(12, 2)
-  comment       String?
-  createdAt     DateTime    @default(now())
-
-  @@index([repairEventId])
-}
-
-model RepairAttachment {
-  id            String                 @id @default(cuid())
-  repairEventId String
-  repairEvent   RepairEvent            @relation(fields: [repairEventId], references: [id], onDelete: Cascade)
-  fileType      RepairAttachmentType
-  fileName      String
-  mimeType      String
-  size          Int
-  storageKey    String
-  uploadedAt    DateTime               @default(now())
-  source        RepairAttachmentSource @default(WEB)
-
-  @@index([repairEventId])
-}
-
-model MaintenanceItem {
-  id                 String    @id @default(cuid())
-  vehicleId          String
-  vehicle            Vehicle   @relation(fields: [vehicleId], references: [id])
-  name               String
-  intervalKm         Int?
-  intervalDays       Int?
-  lastDoneAt         DateTime?
-  lastDoneOdometerKm Int?
-  notifyBeforeKm     Int       @default(500)
-  notifyBeforeDays   Int       @default(7)
-  isActive           Boolean   @default(true)
-  lastNotifiedAt     DateTime?
-  createdAt          DateTime  @default(now())
-  updatedAt          DateTime  @updatedAt
-
-  @@index([vehicleId])
-}
-
-model VehiclePartsSpec {
-  id              String            @id @default(cuid())
-  vehicleId       String
-  vehicle         Vehicle           @relation(fields: [vehicleId], references: [id])
-  groupCode       VehiclePartsGroup
-  recommendedText String
-  preferredBrands Json?
-  avoidBrands     Json?
-  notes           String?
-  createdAt       DateTime          @default(now())
-  updatedAt       DateTime          @updatedAt
-
-  @@index([vehicleId])
-}
-
-model AccidentEvent {
-  id            String       @id @default(cuid())
-  vehicleId     String
-  vehicle       Vehicle      @relation(fields: [vehicleId], references: [id])
-  occurredAt    DateTime
-  odometerKm    Int?
-  description   String
-  damage        String?
-  repaired      Boolean      @default(false)
-  repairEventId String?
-  repairEvent   RepairEvent? @relation(fields: [repairEventId], references: [id])
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
-
-  @@index([vehicleId])
-}
-
-model RepairDraft {
-  id          String            @id @default(cuid())
-  chatId      String
-  step        String
-  payload     Json?
-  createdFrom RepairCreatedFrom @default(TELEGRAM_BOT)
-  createdAt   DateTime          @default(now())
-  updatedAt   DateTime          @updatedAt
-}
-
-model LateDelay {
-  id           String   @id @default(cuid())
-  driverName   String
-  plateNumber  String?
-  routeName    String
-  plannedTime  String?
-  assignedTime String?
-  delayMinutes Int
-  delayDate    DateTime
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  @@index([delayDate])
-  @@index([driverName, delayDate])
+  @@index([receiptId])
 }
 
 enum ReceiptStatus {
@@ -413,55 +239,18 @@ enum DataSource {
   TELEGRAM
 }
 
-enum RepairEventType {
-  MAINTENANCE
-  REPAIR
-}
+model LateDelay {
+  id                String   @id @default(cuid())
+  driverName        String
+  plateNumber       String?
+  routeName         String
+  plannedTime       String?
+  assignedTime      String?
+  delayMinutes      Int
+  delayDate         DateTime
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
-enum RepairEventStatus {
-  DRAFT
-  IN_PROGRESS
-  DONE
-  CANCELLED
-}
-
-enum PaymentStatus {
-  UNPAID
-  PAID
-}
-
-enum RepairCreatedFrom {
-  WEB
-  TELEGRAM_BOT
-}
-
-enum RepairAttachmentType {
-  ORDER
-  PHOTO
-  OTHER
-}
-
-enum RepairAttachmentSource {
-  WEB
-  TELEGRAM_BOT
-}
-
-enum RepairAiParseStatus {
-  NONE
-  PENDING
-  DONE
-  FAILED
-}
-
-enum VehiclePartsGroup {
-  OIL_ENGINE
-  FILTER_OIL
-  FILTER_AIR
-  FILTER_FUEL
-  FILTER_CABIN
-  BRAKE_PADS
-  BRAKE_DISCS
-  SPARK_PLUGS
-  BELTS
-  OTHER
+  @@index([delayDate])
+  @@index([driverName, delayDate])
 }

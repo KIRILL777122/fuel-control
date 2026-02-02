@@ -1,4 +1,5 @@
 import { CompensationList } from "../components/CompensationList";
+import styles from "../page.module.css";
 import { Receipt } from "../types";
 export const dynamic = "force-dynamic";
 
@@ -27,7 +28,7 @@ export default async function CompensationsPage() {
 
   return (
     <div>
-      <h1 style={{ margin: "0 0 24px 0" }}>Компенсация</h1>
+      <h1 className={styles.pageTitle}>Компенсация</h1>
       <CompensationList items={selfPaidAll} />
     </div>
   );

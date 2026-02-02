@@ -1,3 +1,79 @@
+:root {
+  --background: #f5f7fb;
+  --text: #111827;
+  --text-muted: #475569;
+  --card-bg: #ffffff;
+  --card-border: #e6eaf2;
+  --card-shadow: 0 10px 24px rgba(16, 24, 40, 0.04);
+  --sidebar-bg: #fbfbff;
+  --sidebar-border: #e6eaf2;
+  --sidebar-item-hover: #eef2f7;
+  --sidebar-item-active-bg: #eef2ff;
+  --sidebar-item-active-text: #3730a3;
+  --input-bg: #ffffff;
+  --input-border: #d8dde6;
+  --table-th-bg: #f8f9fc;
+  --table-border: #edf1f7;
+  --primary-bg: #4338ca;
+  --primary-text: #ffffff;
+  --accent-color: #6366f1;
+  --accent-light-bg: #eef2ff;
+  --danger-bg: #fee2e2;
+  --danger-text: #b91c1c;
+  --error-color: #ef4444;
+  --success-color: #10b981;
+  --status-pending-bg: #fff4e5;
+  --status-pending-text: #a35a00;
+  --status-done-bg: #e6f7ed;
+  --status-done-text: #18794e;
+  --status-failed-bg: #ffe6e6;
+  --status-failed-text: #bf1650;
+  --releases-th-bg: #fff2cc;
+  --releases-th-text: #475569;
+  --releases-subhead-bg: #e5f2d8;
+  --releases-subhead-text: #1f2937;
+  --conflict-bg: #fee2e2;
+  --conflict-text: #111827;
+}
+
+[data-theme="dark"] {
+  --background: #0f172a;
+  --text: #f8fafc;
+  --text-muted: #94a3b8;
+  --card-bg: #1e293b;
+  --card-border: #334155;
+  --card-shadow: 0 10px 24px rgba(0, 0, 0, 0.2);
+  --sidebar-bg: #0f172a;
+  --sidebar-border: #334155;
+  --sidebar-item-hover: #1e293b;
+  --sidebar-item-active-bg: #334155;
+  --sidebar-item-active-text: #818cf8;
+  --input-bg: #1e293b;
+  --input-border: #334155;
+  --table-th-bg: #1e293b;
+  --table-border: #334155;
+  --primary-bg: #6366f1;
+  --primary-text: #ffffff;
+  --accent-color: #818cf8;
+  --accent-light-bg: #1e1b4b;
+  --danger-bg: #451a1a;
+  --danger-text: #fca5a5;
+  --error-color: #f87171;
+  --success-color: #34d399;
+  --status-pending-bg: #422006;
+  --status-pending-text: #fbbf24;
+  --status-done-bg: #064e3b;
+  --status-done-text: #34d399;
+  --status-failed-bg: #451a1a;
+  --status-failed-text: #f87171;
+  --releases-th-bg: #454026;
+  --releases-th-text: #e2e8f0;
+  --releases-subhead-bg: #2d3a24;
+  --releases-subhead-text: #f8fafc;
+  --conflict-bg: #451a1a;
+  --conflict-text: #f8fafc;
+}
+
 * {
   box-sizing: border-box;
   margin: 0;
@@ -6,8 +82,9 @@
 
 body {
   font-family: "Inter", Arial, sans-serif;
-  color: #111;
-  background: #f8f8fb;
+  color: var(--text);
+  background: var(--background);
+  transition: background 0.3s ease, color 0.3s ease;
 }
 
 /* Sidebar collapsed state - adjust main content margin */

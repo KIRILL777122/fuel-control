@@ -1,5 +1,5 @@
 [Unit]
-Description=Late Report Service - Process delays from email and send to Telegram
+Description=Late Report Docs Service - Process docs from email and send to Telegram
 After=network.target
 
 [Service]
@@ -7,13 +7,14 @@ Type=oneshot
 User=late-report
 Group=late-report
 EnvironmentFile=/etc/late-report/late-report.env
+Environment="DOCS_ONLY=1"
 Environment="TZ=Europe/Moscow"
 Environment="REPORT_TZ=Europe/Moscow"
 WorkingDirectory=/opt/fuel-control/tools/late-report
 ExecStart=/usr/bin/python3 /opt/fuel-control/tools/late-report/src/late_report.py
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=late-report
+SyslogIdentifier=late-report-docs
 
 # Security settings
 PrivateTmp=yes

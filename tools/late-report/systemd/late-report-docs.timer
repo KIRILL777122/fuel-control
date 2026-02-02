@@ -1,0 +1,12 @@
+[Unit]
+Description=Late Report Docs Timer - Run daily at 01:00 MSK
+Requires=late-report-docs.service
+
+[Timer]
+OnCalendar=01:00 Europe/Moscow
+# Каждый день в 01:00 по московскому времени
+AccuracySec=5min
+Persistent=true
+
+[Install]
+WantedBy=timers.target

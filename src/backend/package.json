@@ -12,19 +12,20 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
-    "fastify": "^4.28.1",
-    "@fastify/jwt": "^8.0.0",
+    "@fastify/cookie": "^8.3.0",
     "@fastify/cors": "^9.0.0",
-    "@fastify/multipart": "^8.2.0",
-    "dotenv": "^16.4.5",
-    "telegraf": "^4.16.3",
+    "@fastify/jwt": "^8.0.0",
     "@prisma/client": "^5.19.1",
+    "dotenv": "^16.4.5",
+    "exceljs": "^4.3.0",
+    "fastify": "^4.28.1",
     "jimp": "^0.22.12",
     "jsqr": "^1.4.0",
-    "exceljs": "^4.3.0",
-    "@fastify/cookie": "^8.3.0"
+    "nodemailer": "^7.0.12",
+    "telegraf": "^4.16.3"
   },
   "devDependencies": {
+    "@types/nodemailer": "^7.0.5",
     "prisma": "^5.19.1",
     "tsx": "^4.19.1",
     "typescript": "^5.5.4"
